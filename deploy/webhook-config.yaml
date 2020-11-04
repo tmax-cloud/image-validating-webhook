@@ -1,0 +1,27 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+    name: image-webhook-config
+    labels:
+        app: image-webhook
+webhooks:
+    - name: image-webhook-server
+      clientConfig:
+        caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUN5RENDQWJDZ0F3SUJBZ0lCQURBTkJna3Foa2lHOXcwQkFRc0ZBREFWTVJNd0VRWURWUVFERXdwcmRXSmwKY201bGRHVnpNQjRYRFRJd01UQXlNakEzTlRRMU1sb1hEVE13TVRBeU1EQTNOVFExTWxvd0ZURVRNQkVHQTFVRQpBeE1LYTNWaVpYSnVaWFJsY3pDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTlFxClJVUmczMk04KzhqTmsrQ0w1bGJSRG1uZ0dLZHdDUnRjOHY2bEVFT1dZM0pscTNaT09zSjlKNkhHWkljZXNKMFAKcnBKYVY5U2dkamRWTUlRN3l4bVdOVm80RDJZVWtmY1gwNmRiY0Voc2lla0dCS2pwQzRHWDFncW9kSUk4b0FXaApEZUI3dFZkQXBzcFNMQU9LakVydFpocnJiQlM1MDRrcGJpMHdhWll4MnFOdlJqWlFhNHg3bWd6ck5qSHU4YWl0CktVUEptUEpueVdqTHA4NzFndUhnenp0YXhNTWQzQkJkdEV3TWkvVGRUN2YrQ3J6TW1taGRmNXQrV0pLYm03cFIKUjVSYVRybzVzenJidWhkYzBZRGJCNXQwUkRPZHZLSlhTZUV4WWtBTjhJcy8wVGI0RGZuZ1pQQUxYSFNybU0xUApPeTNvdXd1dWFpMmRyR0s4aWE4Q0F3RUFBYU1qTUNFd0RnWURWUjBQQVFIL0JBUURBZ0trTUE4R0ExVWRFd0VCCi93UUZNQU1CQWY4d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFDTndSMytNeHk1VU85MFFqam1FcDFzV3ZGY0YKV0JhQzdnYjhHZHNmd0hWNDBVTi9TbW5vdUU4aU1YVmhLVUkxMUxkbHZFRFovTDg4YmxtdGJqUXl2Q0YzdmM2WApBZzkzMHpLSGFTRmRZdFA0aEdFQ3k3OU1yc3R4MFpaaVp2KzNwS0RoaWltNXdCYkVwSzJrSUNBOXZ2NXo3KzBUCmYxd2VCWkpDLzVPQnFZVGJjaE1ITU1JUCtzYzN1aCs3YXY4WFFkMkxoY0dyTHQrQlpyajJ0MmFEU1V3cEc3RTQKckZyYWh2ajRJRjVMekZyK0pIbmtRWitKY1paSU9HVEYyTmVJdnhCOUxDd2xLUnFaMWd6QS9FY2NOYitJQTNZaApLQ1JiOHlrQ2cyMjVDb3dyMHVYajAzMWRSR09WQXgzZ0FwSVFwZ0hkNGlqYlBCQURUMWt1VHBCV3BYRT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+        service:
+            name: image-webhook-svc
+            namespace: default
+            path: "/pull"
+            port: 443
+    rule:
+        - operations: []
+            apiGroups: []
+            apiVersion: []
+            resource: []
+    sideEffects: None
+    timeoutSeconds: 5
+    reinvocationPolicy: Never
+    failurePolicy: Ignore
+    namespaceSelector:
+    matchLabels:
+        image-webhook: enabled
