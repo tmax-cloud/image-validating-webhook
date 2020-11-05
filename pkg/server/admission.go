@@ -16,7 +16,7 @@ type ImageValidationAdmission struct {
 func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
 	pod := core.Pod{}
 
-	if err := json.Unmarshal(review, &pod); err != nil {
+	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
 		// logging error
 	}
 
@@ -25,7 +25,7 @@ func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview
 
 	for _, container := range pod.Spec.Containers {
 		name = container.Image // testing code
-		isValid &= isSignedImage(container.Image)
+		isValid = isValid && isSignedImage(container.Image)
 	}
 
 	review.Response = &v1beta1.AdmissionResponse{

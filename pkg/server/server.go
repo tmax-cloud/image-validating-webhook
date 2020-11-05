@@ -35,7 +35,7 @@ func (admissionControllerServer *AdmissionControllerServer) ServeHTTP(writer htt
 	}
 
 	review := &v1beta1.AdmissionReview{}
-	_, _, err := admissionControllerServer.Decoder.Decode(body, nil, review)
+	_, _, err = admissionControllerServer.Decoder.Decode(body, nil, review)
 
 	if err != nil {
 		// logging error
@@ -49,8 +49,7 @@ func (admissionControllerServer *AdmissionControllerServer) ServeHTTP(writer htt
 	}
 }
 
-// GetAdmissionServerWithoutSSL is ...
-func GetAdmissionServerWithoutSSL(admissionController AdmissionController, listenOn string) *http.Server {
+func getAdmissionServerWithoutSSL(admissionController AdmissionController, listenOn string) *http.Server {
 	server := &http.Server{
 		Handler: &AdmissionControllerServer{
 			AdmissionController: admissionController,
@@ -65,9 +64,9 @@ func GetAdmissionServerWithoutSSL(admissionController AdmissionController, liste
 // GetAdmissionValidationServer is ...
 func GetAdmissionValidationServer(admissionController AdmissionController, tlsCert, tlsKey, listenOn string) *http.Server {
 	serverCert, err := tls.LoadX509KeyPair(tlsCert, tlsKey)
-	server := GetAdmissionServerWithoutSSL(admissionController, listenOn)
+	server := getAdmissionServerWithoutSSL(admissionController, listenOn)
 	server.TLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{sCert},
+		Certificates: []tls.Certificate{serverCert},
 	}
 
 	if err != nil {
