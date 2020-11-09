@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"k8s.io/api/admission/v1beta1"
 	core "k8s.io/api/core/v1"
@@ -17,7 +18,7 @@ func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview
 	pod := core.Pod{}
 
 	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
-		// logging error
+		return fmt.Errorf("unmarshaling request failed with %s", err)
 	}
 
 	isValid := true

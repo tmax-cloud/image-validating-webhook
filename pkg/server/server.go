@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 
 	"k8s.io/api/admission/v1beta1"
@@ -31,21 +32,21 @@ func (admissionControllerServer *AdmissionControllerServer) ServeHTTP(writer htt
 	body, err := ioutil.ReadAll(request.Body)
 
 	if err != nil {
-		// logging error
+		log.Panicf("Couldn't read request by %s\n", err)
 	}
 
 	review := &v1beta1.AdmissionReview{}
 	_, _, err = admissionControllerServer.Decoder.Decode(body, nil, review)
 
 	if err != nil {
-		// logging error
+		log.Panicf("Couldn't decode request by %s\n", err)
 	}
 
 	admissionControllerServer.AdmissionController.HandleAdmission(review)
 	responseInBytes, err := json.Marshal(review)
 
 	if _, err := writer.Write(responseInBytes); err != nil {
-		// logging error
+		log.Panicf("Couldn't write response by %s\n", err)
 	}
 }
 
@@ -70,7 +71,7 @@ func GetAdmissionValidationServer(admissionController AdmissionController, tlsCe
 	}
 
 	if err != nil {
-		// logging error
+		log.Panic(err)
 	}
 
 	return server
