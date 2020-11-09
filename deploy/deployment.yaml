@@ -1,0 +1,26 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+    name: image-validation-admission
+    labels:
+        name: image-validation-admission
+spec:
+    replica: 1
+    template:
+        metadata:
+            name: image-validation-admission
+            labels:
+                name: image-validation-admission
+        spec:
+            containers:
+                - name: webhook
+                  image: image-name
+                  imagePullPolicy: IfNotPresent
+                  volumeMounts:
+                    - name: webhook-certs
+                      mountPath: /etc/webhook/certs
+                      readOnly: true
+            volumes:
+                - name: webhook-certs
+                  secret:
+                    secretName: image-validation-admission-certs
