@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"k8s.io/api/admission/v1beta1"
 	core "k8s.io/api/core/v1"
@@ -17,6 +18,8 @@ type ImageValidationAdmission struct {
 func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
 	pod := core.Pod{}
 
+	log.Println("Handling review")
+
 	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
 		return fmt.Errorf("unmarshaling request failed with %s", err)
 	}
@@ -26,6 +29,7 @@ func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview
 
 	for _, container := range pod.Spec.Containers {
 		name = container.Image // testing code
+		log.Println(name)
 		isValid = isValid && isSignedImage(container.Image)
 	}
 

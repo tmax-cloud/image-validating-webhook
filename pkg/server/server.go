@@ -31,6 +31,8 @@ type AdmissionControllerServer struct {
 func (admissionControllerServer *AdmissionControllerServer) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	body, err := ioutil.ReadAll(request.Body)
 
+	log.Println("Handling request")
+
 	if err != nil {
 		log.Panicf("Couldn't read request by %s\n", err)
 	}
@@ -50,27 +52,25 @@ func (admissionControllerServer *AdmissionControllerServer) ServeHTTP(writer htt
 	}
 }
 
-func getAdmissionServerWithoutSSL(admissionController AdmissionController, listenOn string) *http.Server {
-	server := &http.Server{
-		Handler: &AdmissionControllerServer{
-			AdmissionController: admissionController,
-			Decoder:             codecs.UniversalDeserializer(),
-		},
-		Addr: listenOn,
-	}
-
-	return server
-}
-
 // GetAdmissionValidationServer is ...
 func GetAdmissionValidationServer(admissionController AdmissionController, tlsCert, tlsKey, listenOn string) *http.Server {
 	serverCert, err := tls.LoadX509KeyPair(tlsCert, tlsKey)
-	server := getAdmissionServerWithoutSSL(admissionController, listenOn)
-	server.TLSConfig = &tls.Config{
-		Certificates: []tls.Certificate{serverCert},
+	mux := http.NewServeMux()
+	mux.Handle("/validate", &AdmissionControllerServer{
+		AdmissionController: admissionController,
+		Decoder:             codecs.UniversalDeserializer(),
+	})
+
+	server := &http.Server{
+		Handler: mux,
+		Addr:    listenOn,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{serverCert},
+		},
 	}
 
 	if err != nil {
+		log.Printf("params: %s %s %s", tlsCert, tlsKey, listenOn)
 		log.Panic(err)
 	}
 

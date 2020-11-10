@@ -6,12 +6,16 @@ webhooks:
     - name: image-validation-admission.tmax-cloud.github.com
       clientConfig:
         service:
-            name: image-validation-admission
-            path: "/"
+            name: image-validation-admission-svc
+            path: "/validate"
             namespace: default
+            port: 443
         caBundle: ${CA_BUNDLE}
       rules:
         - operations: ["CREATE"]
-          apiGroups: [""]
-          apiVersion: ["v1"]
-      failurePolicy: Ignore
+          apiGroups: ["*"]
+          apiVersions: ["*"]
+          resources:
+            - "pods"
+      failurePolicy: Fail
+      matchPolicy: Equivalent
