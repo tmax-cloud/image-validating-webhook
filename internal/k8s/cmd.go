@@ -4,7 +4,7 @@ import (
 	"io"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/deprecated/scheme"
+	"k8s.io/client-go/kubernetes/scheme"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"

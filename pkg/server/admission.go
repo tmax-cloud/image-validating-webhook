@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/eddy-kor-92/image-webhook/internal/k8s"
 	"k8s.io/api/admission/v1beta1"
@@ -13,9 +14,9 @@ import (
 )
 
 const (
-	dndPod       = "dnd-pod"
-	dndContainer = "dnd-container"
-	dndNamespace = "default"
+	dindDeployment = "internal-docker-daemon"
+	dindContainer  = "dind-daemon"
+	dindNamespace  = "default"
 )
 
 // ImageValidationAdmission is ...
@@ -66,13 +67,23 @@ func isSignedImage(image string) bool {
 		ErrBuffer: &bytes.Buffer{},
 	}
 
-	command := fmt.Sprintf("docker trust inspect %s", image)
+	command := fmt.Sprintf("docker trust inspect %s", makeTaggedImage(image))
 
-	if err := k8s.ExecCmd(dndPod, dndContainer, dndNamespace, command, nil, result.OutBuffer, result.ErrBuffer); err != nil {
-		log.Panicf("Failed to execute command to docker daemon by %s", err)
+	if err := k8s.ExecCmd(dindDeployment, dindContainer, dindNamespace, command, nil, result.OutBuffer, result.ErrBuffer); err != nil {
+		log.Printf("Failed to execute command to docker daemon by %s", err)
 	}
 
-	log.Println(result.OutBuffer.String())
+	if result.OutBuffer == nil {
+		log.Panicf("Failed to get signature of image %s", image)
+	}
 
-	return false
+	return !strings.Contains(result.OutBuffer.String(), "No signatures")
+}
+
+func makeTaggedImage(image string) string {
+	if strings.Contains(image, ":") {
+		return image
+	}
+
+	return image + ":latest"
 }
