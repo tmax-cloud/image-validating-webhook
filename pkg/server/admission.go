@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,10 +12,12 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	core "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
-	dindDeployment = "internal-docker-daemon"
+	dindDeployment = "docker-daemon"
 	dindContainer  = "dind-daemon"
 	dindNamespace  = "default"
 )
@@ -31,10 +34,9 @@ type ExecResult struct {
 
 // HandleAdmission is ...
 func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
-	pod := core.Pod{}
-
 	log.Println("Handling review")
 
+	pod := core.Pod{}
 	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
 		return fmt.Errorf("unmarshaling request failed with %s", err)
 	}
@@ -62,6 +64,24 @@ func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview
 }
 
 func isSignedImage(image string) bool {
+	kubeCfg := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		clientcmd.NewDefaultClientConfigLoadingRules(),
+		&clientcmd.ConfigOverrides{},
+	)
+
+	restCfg, _ := kubeCfg.ClientConfig()
+
+	clientset, _ := kubernetes.NewForConfig(restCfg)
+
+	pods, _ := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=%s", dindDeployment),
+	})
+
+	pod := core.Pod{}
+	if len(pods.Items) > 0 {
+		pod = pods.Items[0]
+	}
+
 	result := &ExecResult{
 		OutBuffer: &bytes.Buffer{},
 		ErrBuffer: &bytes.Buffer{},
@@ -69,7 +89,7 @@ func isSignedImage(image string) bool {
 
 	command := fmt.Sprintf("docker trust inspect %s", makeTaggedImage(image))
 
-	if err := k8s.ExecCmd(dindDeployment, dindContainer, dindNamespace, command, nil, result.OutBuffer, result.ErrBuffer); err != nil {
+	if err := k8s.ExecCmd(pod.GetName(), dindContainer, dindNamespace, command, nil, result.OutBuffer, result.ErrBuffer); err != nil {
 		log.Printf("Failed to execute command to docker daemon by %s", err)
 	}
 
