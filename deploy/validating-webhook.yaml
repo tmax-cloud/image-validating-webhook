@@ -1,0 +1,21 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+    name: image-validation-admission
+webhooks:
+    - name: image-validation-admission.tmax-cloud.github.com
+      clientConfig:
+        service:
+            name: image-validation-admission-svc
+            path: "/validate"
+            namespace: default
+            port: 443
+        caBundle: ${CA_BUNDLE}
+      rules:
+        - operations: ["CREATE"]
+          apiGroups: ["*"]
+          apiVersions: ["*"]
+          resources:
+            - "pods"
+      failurePolicy: Fail
+      matchPolicy: Equivalent
