@@ -45,7 +45,7 @@ done
 
 [ -z "${service}" ] && service=image-validation-admission-svc
 [ -z "${secret}" ] && secret=image-validation-admission-certs
-[ -z "${namespace}" ] && namespace=default
+[ -z "${namespace}" ] && namespace=registry-system
 
 if [ ! -x "$(command -v openssl)" ]; then
     echo "openssl not found"

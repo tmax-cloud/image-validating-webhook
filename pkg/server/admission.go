@@ -19,7 +19,7 @@ import (
 const (
 	dindDeployment = "docker-daemon"
 	dindContainer  = "dind-daemon"
-	dindNamespace  = "default"
+	dindNamespace  = "registry-system"
 )
 
 // ImageValidationAdmission is ...
@@ -44,7 +44,9 @@ func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview
 	isValid := true
 	name := "default image"
 
-	for _, container := range pod.Spec.Containers {
+	containers := append(pod.Spec.InitContainers, pod.Spec.Containers...)
+
+	for _, container := range containers {
 		isValid = isValid && isSignedImage(container.Image)
 
 		if !isValid {
@@ -53,11 +55,17 @@ func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview
 		}
 	}
 
-	review.Response = &v1beta1.AdmissionResponse{
-		Allowed: isValid,
-		Result: &v1.Status{
-			Message: fmt.Sprintf("Image '%s' is not signed", name),
-		},
+	if isValid {
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: true,
+		}
+	} else {
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: false,
+			Result: &v1.Status{
+				Message: fmt.Sprintf("Image '%s' is not signed", name),
+			},
+		}
 	}
 
 	return nil
@@ -73,7 +81,7 @@ func isSignedImage(image string) bool {
 
 	clientset, _ := kubernetes.NewForConfig(restCfg)
 
-	pods, _ := clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{
+	pods, _ := clientset.CoreV1().Pods(dindNamespace).List(context.TODO(), v1.ListOptions{
 		LabelSelector: fmt.Sprintf("app=%s", dindDeployment),
 	})
 
@@ -93,7 +101,7 @@ func isSignedImage(image string) bool {
 		log.Printf("Failed to execute command to docker daemon by %s", err)
 	}
 
-	if result.OutBuffer == nil {
+	if result.OutBuffer.Len() <= 0 {
 		log.Panicf("Failed to get signature of image %s", image)
 	}
 

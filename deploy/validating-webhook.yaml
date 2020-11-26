@@ -2,13 +2,14 @@ apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
     name: image-validation-admission
+    namespace: registry-system
 webhooks:
     - name: image-validation-admission.tmax-cloud.github.com
       clientConfig:
         service:
             name: image-validation-admission-svc
             path: "/validate"
-            namespace: default
+            namespace: registry-system
             port: 443
         caBundle: ${CA_BUNDLE}
       rules:

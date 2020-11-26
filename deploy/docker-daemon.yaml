@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
     name: docker-daemon
-    namespace: default
+    namespace: registry-system
     labels:
         name: docker-daemon
 spec:

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
     name: image-validation-admission
-    namespace: default
+    namespace: registry-system
     labels:
         name: image-validation-admission
 spec:
@@ -27,3 +27,4 @@ spec:
                 - name: webhook-certs
                   secret:
                     secretName: image-validation-admission-certs
+            serviceAccountName: image-validation-webhook
