@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/eddy-kor-92/image-webhook/internal/k8s"
+	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
 	"k8s.io/api/admission/v1beta1"
 	core "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -1,4 +1,4 @@
-module github.com/eddy-kor-92/image-webhook
+module github.com/tmax-cloud/image-validating-webhook
 
 go 1.14
 
