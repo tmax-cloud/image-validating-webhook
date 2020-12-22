@@ -23,6 +23,12 @@ spec:
                     - name: webhook-certs
                       mountPath: /etc/webhook/certs
                       readOnly: true
+                  env:
+                    - name: IMAGE_WHITELIST
+                      valueFrom:
+                          configMapKeyRef:
+                            name: image-validation-webhook-whitelist
+                            key: whitelist.json
             volumes:
                 - name: webhook-certs
                   secret:

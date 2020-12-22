@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
@@ -22,8 +23,11 @@ const (
 	dindNamespace  = "registry-system"
 )
 
+var whiteList = os.Getenv("IMAGE_WHITELIST")
+
 // ImageValidationAdmission is ...
 type ImageValidationAdmission struct {
+	whiteList *[]string
 }
 
 // ExecResult is ...
@@ -33,8 +37,17 @@ type ExecResult struct {
 }
 
 // HandleAdmission is ...
-func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
+func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
 	log.Println("Handling review")
+
+	log.Println(whiteList)
+	var list []string
+
+	if err := json.Unmarshal([]byte(whiteList), &list); err != nil {
+		return fmt.Errorf("unmarshaling white list failed by %s", err)
+	}
+
+	a.whiteList = &list
 
 	pod := core.Pod{}
 	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
@@ -47,7 +60,7 @@ func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview
 	containers := append(pod.Spec.InitContainers, pod.Spec.Containers...)
 
 	for _, container := range containers {
-		isValid = isValid && isSignedImage(container.Image)
+		isValid = a.isInWhiteList(container.Image) || isValid && isSignedImage(container.Image)
 
 		if !isValid {
 			name = container.Image
@@ -69,6 +82,15 @@ func (*ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview
 	}
 
 	return nil
+}
+
+func (a *ImageValidationAdmission) isInWhiteList(image string) bool {
+	for _, whiteListImage := range *a.whiteList {
+		// TODO: 추가적인 상황 고려하여 로직 개선할 것
+		return strings.Contains(whiteListImage, image)
+	}
+
+	return false
 }
 
 func isSignedImage(image string) bool {
