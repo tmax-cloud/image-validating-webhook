@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
@@ -21,9 +21,8 @@ const (
 	dindDeployment = "docker-daemon"
 	dindContainer  = "dind-daemon"
 	dindNamespace  = "registry-system"
+	whitelist      = "/etc/webhook/config/whitelist.json"
 )
-
-var whiteList = os.Getenv("IMAGE_WHITELIST")
 
 // ImageValidationAdmission is ...
 type ImageValidationAdmission struct {
@@ -40,14 +39,18 @@ type ExecResult struct {
 func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
 	log.Println("Handling review")
 
-	log.Println(whiteList)
-	var list []string
+	f, err := ioutil.ReadFile(whitelist)
+	if err != nil {
+		return fmt.Errorf("reading white list config file failed by %s", err)
+	}
 
-	if err := json.Unmarshal([]byte(whiteList), &list); err != nil {
+	var list []string
+	if err := json.Unmarshal(f, &list); err != nil {
 		return fmt.Errorf("unmarshaling white list failed by %s", err)
 	}
 
 	a.whiteList = &list
+	log.Println(list)
 
 	pod := core.Pod{}
 	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
@@ -87,7 +90,7 @@ func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionRevi
 func (a *ImageValidationAdmission) isInWhiteList(image string) bool {
 	for _, whiteListImage := range *a.whiteList {
 		// TODO: 추가적인 상황 고려하여 로직 개선할 것
-		return strings.Contains(whiteListImage, image)
+		return strings.Contains(image, whiteListImage)
 	}
 
 	return false
