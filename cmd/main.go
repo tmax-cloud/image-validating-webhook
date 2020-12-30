@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/eddy-kor-92/image-webhook/pkg/server"
+	"github.com/tmax-cloud/image-validating-webhook/pkg/server"
 )
 
 func main() {
