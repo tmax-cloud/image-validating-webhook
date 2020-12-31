@@ -13,7 +13,7 @@ func main() {
 	key := "/etc/webhook/certs/key.pem"
 	listenOn := "0.0.0.0:8443"
 
-	admissionController := server.ImageValidationAdmission{}
-	webhookServer := server.GetAdmissionValidationServer(&admissionController, cert, key, listenOn)
+	admissionController := server.NewAdmissionController()
+	webhookServer := server.GetAdmissionValidationServer(admissionController, cert, key, listenOn)
 	webhookServer.ListenAndServeTLS("", "")
 }
