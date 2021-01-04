@@ -68,7 +68,6 @@ func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionRevi
 	}
 
 	a.whiteList = &list
-	log.Println(list)
 
 	pod := core.Pod{}
 	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
@@ -104,9 +103,10 @@ func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionRevi
 }
 
 func (a *ImageValidationAdmission) isInWhiteList(image string) bool {
+	host, name, tag := getHostAndTag(image)
+	validFormatImage := fmt.Sprintf("%s/%s:%s", host, name, tag)
 	for _, whiteListImage := range *a.whiteList {
-		// TODO: 추가적인 상황 고려하여 로직 개선할 것
-		return strings.Contains(image, whiteListImage)
+		return strings.Contains(validFormatImage, whiteListImage)
 	}
 
 	return false
@@ -127,7 +127,6 @@ func (a *ImageValidationAdmission) isSignedImage(image string) bool {
 	}
 	host, name, tag := getHostAndTag(image)
 	notaryServer, err := a.findNotaryServer(host)
-	log.Println(notaryServer)
 	if err != nil {
 		return false
 	}
@@ -139,8 +138,6 @@ func (a *ImageValidationAdmission) isSignedImage(image string) bool {
 		command = fmt.Sprintf("export DOCKER_CONTENT_TRUST_SERVER=%s; docker trust inspect %s/%s:%s", notaryServer, host, name, tag)
 	}
 
-	log.Println(command)
-
 	if err := k8s.ExecCmd(pod.GetName(), dindContainer, dindNamespace, command, nil, result.OutBuffer, result.ErrBuffer); err != nil {
 		log.Printf("Failed to execute command to docker daemon by %s", err)
 	}
@@ -149,9 +146,13 @@ func (a *ImageValidationAdmission) isSignedImage(image string) bool {
 		log.Panicf("Failed to get signature of image %s", image)
 	}
 
-	log.Println(result.OutBuffer.String())
+	signatures, err := getSignatures(result.OutBuffer.String())
+	if err != nil {
+		log.Printf("Failed to get signature by %s", err)
+		return false
+	}
 
-	return !strings.Contains(result.OutBuffer.String(), "No signatures")
+	return len(signatures) != 0
 }
 
 func (a *ImageValidationAdmission) getRegistries() *regv1.RegistryList {
@@ -164,6 +165,10 @@ func (a *ImageValidationAdmission) getRegistries() *regv1.RegistryList {
 }
 
 func (a *ImageValidationAdmission) findNotaryServer(host string) (string, error) {
+	if host == "docker.io" {
+		return "", nil
+	}
+
 	var targetReg *regv1.Registry
 	regList := a.getRegistries()
 	for _, reg := range regList.Items {
