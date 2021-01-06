@@ -24,6 +24,15 @@ spec:
                   volumeMounts:
                     - name: docker-graph-storage
                       mountPath: /var/lib/docker
+                    - name: root-ca
+                      mountPath: /usr/local/share/ca-certificates
+                  lifecycle:
+                      postStart:
+                        exec:
+                          command: ["/bin/sh", "-c", "update-ca-certificates"]
             volumes:
                 - name: docker-graph-storage
                   emptyDir: {}
+                - name: root-ca
+                  secret:
+                      secretName: hpcd-registry-rootca
