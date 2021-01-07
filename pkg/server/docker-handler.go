@@ -92,7 +92,6 @@ func (h *DockerHandler) isValid() (bool, string) {
 
 func (h *DockerHandler) isSignedImage(image string) bool {
 	imageInfo := getImageInfo(image)
-	log.Println("host: " + imageInfo.registry)
 	notaryServer, err := h.findNotaryServer(imageInfo.registry)
 	if err != nil {
 		log.Printf("Couldn't find notary server by: %s", err)
@@ -103,9 +102,11 @@ func (h *DockerHandler) isSignedImage(image string) bool {
 	if imageInfo.registry == "docker.io" {
 		command = fmt.Sprintf("docker trust inspect %s:%s", imageInfo.name, imageInfo.tag)
 	} else {
+		if err := h.loginToRegistry(imageInfo.registry); err != nil {
+			log.Printf("Couldn't login to registry named %s: by %s", imageInfo.registry, err)
+		}
 		command = fmt.Sprintf("export DOCKER_CONTENT_TRUST_SERVER=%s; docker trust inspect %s/%s:%s", notaryServer, imageInfo.registry, imageInfo.name, imageInfo.tag)
 	}
-	log.Println("command: " + command)
 
 	result, err := h.execToDockerDaemon(command)
 	if err != nil {
@@ -116,7 +117,6 @@ func (h *DockerHandler) isSignedImage(image string) bool {
 		log.Panicf("Failed to get signature of image %s", image)
 	}
 
-	log.Println(result.OutBuffer.String())
 	signatures, err := getSignatures(result.OutBuffer.String())
 	if err != nil {
 		log.Printf("Failed to get signature by %s", err)
@@ -132,11 +132,64 @@ func (h *DockerHandler) execToDockerDaemon(command string) (*ExecResult, error) 
 		ErrBuffer: &bytes.Buffer{},
 	}
 
-	if err := k8s.ExecCmd(h.pod.GetName(), dindContainer, dindNamespace, command, nil, result.OutBuffer, result.ErrBuffer); err != nil {
+	if err := k8s.ExecCmd(h.dindPodName, dindContainer, dindNamespace, command, nil, result.OutBuffer, result.ErrBuffer); err != nil {
 		return result, err
 	}
 
 	return result, nil
+}
+
+func (h *DockerHandler) loginToRegistry(registry string) error {
+	pullSecrets := h.pod.Spec.ImagePullSecrets
+	if len(pullSecrets) <= 0 {
+		return fmt.Errorf("There's any pullSecret")
+	}
+
+	for _, pullSecret := range pullSecrets {
+		secret, err := h.getSecret(pullSecret.Name)
+		if err != nil {
+			log.Printf("Couldn't get secret named %s by %s", pullSecret.Name, err)
+			break
+		}
+		id, idExist := secret.Data["ID"]
+		pw, pwExist := secret.Data["PASSWD"]
+		if idExist && pwExist {
+			result, err := h.execToDockerDaemon(fmt.Sprintf("docker login %s -u %s -p %s", registry, id, pw))
+			if err != nil {
+				log.Printf("Couldn't exec docker login command by %s", err)
+				continue
+			}
+
+			if strings.Contains(result.OutBuffer.String(), "Login Succeeded") {
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("There's no pullSecret to login to registry named %s", registry)
+}
+
+func (h *DockerHandler) getSecret(secretName string) (*core.Secret, error) {
+	allSecrets, err := h.client.CoreV1().Secrets("").List(context.TODO(), v1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var result core.Secret
+	exist := false
+	for _, secret := range allSecrets.Items {
+		if secret.Name == secretName {
+			result = secret
+			exist = true
+			break
+		}
+	}
+
+	if exist {
+		return &result, nil
+	}
+
+	return nil, fmt.Errorf("There's no secret named %s", secretName)
 }
 
 func (h *DockerHandler) isInWhiteList(image string) bool {
