@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	dindDeployment = "docker-daemon"
-	dindContainer  = "dind-daemon"
-	dindNamespace  = "registry-system"
-	whitelist      = "/etc/webhook/config/whitelist.json"
+	dindDeployment       = "docker-daemon"
+	dindContainer        = "dind-daemon"
+	dindNamespace        = "registry-system"
+	whitelistByImage     = "/etc/webhook/config/whitelist-image.json"
+	whitelistByNamespace = "/etc/webhook/config/whitelist-namespace.json"
 )
 
 // ImageValidationAdmission is ...
@@ -37,7 +38,11 @@ func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionRevi
 		return fmt.Errorf("Couldn't create handler by %s", err)
 	}
 
-	isValid, name := handler.isValid()
+	isValid := handler.isNamespaceInWhiteList()
+	var name = ""
+	if !isValid {
+		isValid, name = handler.isValid()
+	}
 
 	if isValid {
 		review.Response = &v1beta1.AdmissionResponse{

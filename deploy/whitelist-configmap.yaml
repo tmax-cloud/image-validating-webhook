@@ -4,5 +4,7 @@ metadata:
   name: image-validation-webhook-whitelist
   namespace: registry-system
 data:
-  whitelist.json: |-
+  whitelist-image.json: |-
     ["image-validation-webhook"]
+  whitelist-namespace.json: |-
+    ["registry-system"]
