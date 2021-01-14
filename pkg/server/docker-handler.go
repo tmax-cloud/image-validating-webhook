@@ -11,7 +11,6 @@ import (
 
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
 	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
-	tmaxiov1 "github.com/tmax-cloud/registry-operator/api/v1"
 	core "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -19,11 +18,11 @@ import (
 )
 
 type DockerHandler struct {
-	client       *kubernetes.Clientset
-	whiteList    *[]string
-	pod          core.Pod
-	currentImage ImageInfo
-	dindPodName  string
+	client         *kubernetes.Clientset
+	whiteList      *[]string
+	pod            core.Pod
+	dindPodName    string
+	signerPolicies []regv1.SignerPolicy
 }
 
 type ImageInfo struct {
@@ -45,7 +44,7 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 	)
 	restCfg, _ := kubeCfg.ClientConfig()
 	clientset, _ := kubernetes.NewForConfig(restCfg)
-	tmaxiov1.AddToScheme(scheme)
+	regv1.AddToScheme(scheme)
 
 	f, err := ioutil.ReadFile(whitelist)
 	if err != nil {
@@ -65,11 +64,17 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 		dindPod = pods.Items[0]
 	}
 
+	signerPolicies := &regv1.SignerPolicyList{}
+	if err := clientset.RESTClient().Get().AbsPath("apis/tmax.io/v1").Resource("signerpolicies").Do(context.TODO()).Into(signerPolicies); err != nil {
+		log.Printf("signer policies error, %s", err)
+	}
+
 	return &DockerHandler{
-		client:      clientset,
-		pod:         pod,
-		whiteList:   &list,
-		dindPodName: dindPod.GetName(),
+		client:         clientset,
+		pod:            pod,
+		whiteList:      &list,
+		dindPodName:    dindPod.GetName(),
+		signerPolicies: signerPolicies.Items,
 	}, nil
 }
 
@@ -123,7 +128,36 @@ func (h *DockerHandler) isSignedImage(image string) bool {
 		return false
 	}
 
-	return len(signatures) != 0
+	return h.hasMatchedSigner(signatures)
+}
+
+func (h *DockerHandler) hasMatchedSigner(signatures []Signature) bool {
+	if len(h.signerPolicies) == 0 {
+		return len(signatures) != 0
+	}
+
+	if len(signatures) == 0 {
+		return false
+	}
+
+	key := signatures[0].getRepoAdminKey()
+
+	for _, signerPolicy := range h.signerPolicies {
+		for _, signerName := range signerPolicy.Spec.Signers {
+			signer := &regv1.SignerKey{}
+			if err := h.client.RESTClient().Get().AbsPath("apis/tmax.io/v1").Resource("signerkeys").Name(signerName).Do(context.TODO()).Into(signer); err != nil {
+				log.Printf("signer getting error by %s", err)
+			}
+
+			for _, targetKey := range signer.Spec.Targets {
+				if targetKey.ID == key {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 func (h *DockerHandler) execToDockerDaemon(command string) (*ExecResult, error) {

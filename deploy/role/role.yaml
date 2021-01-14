@@ -22,6 +22,8 @@ rules:
   resources:
   - registries
   - registries/status
+  - signerkeys
+  - signerpolicies
   verbs:
   - get
   - list
