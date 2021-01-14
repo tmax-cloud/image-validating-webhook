@@ -65,7 +65,12 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 	}
 
 	signerPolicies := &regv1.SignerPolicyList{}
-	if err := clientset.RESTClient().Get().AbsPath("apis/tmax.io/v1").Resource("signerpolicies").Do(context.TODO()).Into(signerPolicies); err != nil {
+	if err := clientset.RESTClient().
+		Get().AbsPath("apis/tmax.io/v1").
+		Resource("signerpolicies").
+		Namespace(pod.Namespace).
+		Do(context.TODO()).
+		Into(signerPolicies); err != nil {
 		log.Printf("signer policies error, %s", err)
 	}
 
@@ -251,7 +256,7 @@ func (h *DockerHandler) findNotaryServer(registry string) (string, error) {
 	}
 
 	if targetReg == nil {
-		return "", fmt.Errorf("No matched registry")
+		return "", fmt.Errorf("No matched registry named: %s", registry)
 	}
 
 	return targetReg.Status.NotaryURL, nil
