@@ -4,7 +4,7 @@ go 1.14
 
 require (
 	github.com/imdario/mergo v0.3.11 // indirect
-	github.com/tmax-cloud/registry-operator v0.0.0-20201223070553-e8dee86c6a3f
+	github.com/tmax-cloud/registry-operator v0.1.2-0.20210113072852-dfbb5f2a9c2d
 	k8s.io/api v0.19.4
 	k8s.io/apimachinery v0.19.4
 	k8s.io/client-go v0.19.4

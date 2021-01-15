@@ -31,6 +31,16 @@ type Key struct {
 	ID string `json: "ID"`
 }
 
+func (s *Signature) getRepoAdminKey() string {
+	for _, key := range s.AdministrativeKeys {
+		if key.Name == "Repository" {
+			return key.Keys[0].ID
+		}
+	}
+
+	return ""
+}
+
 func getSignatures(raw string) ([]Signature, error) {
 	start := strings.Index(raw, "[")
 	end := strings.LastIndex(raw, "]")
