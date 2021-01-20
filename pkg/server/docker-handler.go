@@ -19,7 +19,7 @@ import (
 
 type DockerHandler struct {
 	client         *kubernetes.Clientset
-	whiteList      *[]string
+	whiteList      WhiteList
 	pod            core.Pod
 	dindPodName    string
 	signerPolicies []regv1.SignerPolicy
@@ -29,6 +29,11 @@ type ImageInfo struct {
 	registry string
 	name     string
 	tag      string
+}
+
+type WhiteList struct {
+	byImages     []string
+	byNamespaces []string
 }
 
 // ExecResult is ...
@@ -46,14 +51,19 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 	clientset, _ := kubernetes.NewForConfig(restCfg)
 	regv1.AddToScheme(scheme)
 
-	f, err := ioutil.ReadFile(whitelist)
-	if err != nil {
-		return nil, fmt.Errorf("reading white list config file failed by %s", err)
+	imagef, err1 := ioutil.ReadFile(whitelistByImage)
+	namespacef, err2 := ioutil.ReadFile(whitelistByNamespace)
+	if err1 != nil || err2 != nil {
+		return nil, fmt.Errorf("reading white list config file failed")
 	}
 
-	var list []string
-	if err := json.Unmarshal(f, &list); err != nil {
-		return nil, fmt.Errorf("unmarshaling white list failed by %s", err)
+	var imageList, namespaceList []string
+	if err := json.Unmarshal(imagef, &imageList); err != nil {
+		return nil, fmt.Errorf("unmarshaling image white list failed by %s", err)
+	}
+
+	if err := json.Unmarshal(namespacef, &namespaceList); err != nil {
+		return nil, fmt.Errorf("unmarshaling namespace white list failed by %s", err)
 	}
 
 	pods, _ := clientset.CoreV1().Pods(dindNamespace).List(context.TODO(), v1.ListOptions{
@@ -77,7 +87,7 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 	return &DockerHandler{
 		client:         clientset,
 		pod:            pod,
-		whiteList:      &list,
+		whiteList:      WhiteList{byImages: imageList, byNamespaces: namespaceList},
 		dindPodName:    dindPod.GetName(),
 		signerPolicies: signerPolicies.Items,
 	}, nil
@@ -89,7 +99,7 @@ func (h *DockerHandler) isValid() (bool, string) {
 
 	containers := append(h.pod.Spec.InitContainers, h.pod.Spec.Containers...)
 	for _, container := range containers {
-		isValid = h.isInWhiteList(container.Image) || isValid && h.isSignedImage(container.Image)
+		isValid = h.isImageInWhiteList(container.Image) || isValid && h.isSignedImage(container.Image)
 
 		if !isValid {
 			name = container.Image
@@ -231,11 +241,23 @@ func (h *DockerHandler) getSecret(secretName string) (*core.Secret, error) {
 	return nil, fmt.Errorf("There's no secret named %s", secretName)
 }
 
-func (h *DockerHandler) isInWhiteList(image string) bool {
+func (h *DockerHandler) isImageInWhiteList(image string) bool {
 	imageInfo := getImageInfo(image)
 	validFormatImage := fmt.Sprintf("%s/%s:%s", imageInfo.registry, imageInfo.name, imageInfo.tag)
-	for _, whiteListImage := range *h.whiteList {
-		return strings.Contains(validFormatImage, whiteListImage)
+	for _, whiteListImage := range h.whiteList.byImages {
+		if strings.Contains(validFormatImage, whiteListImage) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (h *DockerHandler) isNamespaceInWhiteList() bool {
+	for _, whiteListNamespace := range h.whiteList.byNamespaces {
+		if h.pod.Namespace == whiteListNamespace {
+			return true
+		}
 	}
 
 	return false
