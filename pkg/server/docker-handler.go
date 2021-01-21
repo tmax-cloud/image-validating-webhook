@@ -112,15 +112,11 @@ func (h *DockerHandler) isValid() (bool, string) {
 
 func (h *DockerHandler) isSignedImage(image string) bool {
 	imageInfo := getImageInfo(image)
-	notaryServer, err := h.findNotaryServer(imageInfo.registry)
-	if err != nil {
-		log.Printf("Couldn't find notary server by: %s", err)
-		return false
-	}
+	notaryServer := h.findNotaryServer(imageInfo.registry)
 
 	var command string
-	if imageInfo.registry == "docker.io" {
-		command = fmt.Sprintf("docker trust inspect %s:%s", imageInfo.name, imageInfo.tag)
+	if notaryServer == "docker-hub" {
+		command = fmt.Sprintf("unset DOCKER_CONTENT_TRUST_SERVER; docker trust inspect %s:%s", imageInfo.name, imageInfo.tag)
 	} else {
 		if err := h.loginToRegistry(imageInfo.registry); err != nil {
 			log.Printf("Couldn't login to registry named %s: by %s", imageInfo.registry, err)
@@ -263,9 +259,9 @@ func (h *DockerHandler) isNamespaceInWhiteList() bool {
 	return false
 }
 
-func (h *DockerHandler) findNotaryServer(registry string) (string, error) {
-	if registry == "docker.io" || strings.Contains(registry, "/") {
-		return "", nil
+func (h *DockerHandler) findNotaryServer(registry string) string {
+	if registry == "docker.io" {
+		return "docker-hub"
 	}
 
 	var targetReg *regv1.Registry
@@ -278,10 +274,11 @@ func (h *DockerHandler) findNotaryServer(registry string) (string, error) {
 	}
 
 	if targetReg == nil {
-		return "", fmt.Errorf("No matched registry named: %s", registry)
+		log.Printf("No matched registry named: %s. Couldn't find notary server", registry)
+		return "docker-hub"
 	}
 
-	return targetReg.Status.NotaryURL, nil
+	return targetReg.Status.NotaryURL
 }
 
 func (h *DockerHandler) getRegistries() *regv1.RegistryList {
