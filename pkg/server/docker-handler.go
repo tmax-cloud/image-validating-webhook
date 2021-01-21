@@ -81,7 +81,7 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 		Namespace(pod.Namespace).
 		Do(context.TODO()).
 		Into(signerPolicies); err != nil {
-		log.Printf("signer policies error, %s", err)
+		return nil, fmt.Errorf("signer policies error, %s", err)
 	}
 
 	return &DockerHandler{
@@ -264,7 +264,7 @@ func (h *DockerHandler) isNamespaceInWhiteList() bool {
 }
 
 func (h *DockerHandler) findNotaryServer(registry string) (string, error) {
-	if registry == "docker.io" {
+	if registry == "docker.io" || strings.Contains(registry, "/") {
 		return "", nil
 	}
 
@@ -296,12 +296,10 @@ func (h *DockerHandler) getRegistries() *regv1.RegistryList {
 func getImageInfo(image string) ImageInfo {
 	var host, name, tag string
 
-	host = image
-
-	if strings.Contains(host, "/") {
-		temp := strings.Split(host, "/")
-		host = temp[0]
-		name = temp[1]
+	if strings.Contains(image, "/") {
+		idx := strings.LastIndex(image, "/")
+		host = image[:idx]
+		name = image[idx+1:]
 	} else {
 		host = "docker.io"
 		name = image
@@ -314,6 +312,8 @@ func getImageInfo(image string) ImageInfo {
 	} else {
 		tag = "latest"
 	}
+
+	log.Printf("INFO: image %s => registry: %s name: %s tag: %s", image, host, name, tag)
 
 	return ImageInfo{
 		registry: host,

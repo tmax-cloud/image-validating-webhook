@@ -26,29 +26,46 @@ type ImageValidationAdmission struct {
 
 // HandleAdmission is ...
 func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
-	log.Println("Handling review")
-
 	pod := core.Pod{}
 	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
-		return fmt.Errorf("unmarshaling request failed with %s", err)
+		log.Printf("unmarshaling request failed with %s", err)
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: false,
+			Result: &v1.Status{
+				Message: fmt.Sprintf("Internal webhook server error: %s", err),
+			},
+		}
+		return err
 	}
+
+	log.Printf("INFO: Start to handle review of pod %s in %s", pod.Name, pod.Namespace)
 
 	handler, err := newDockerHandler(pod)
 	if err != nil {
-		return fmt.Errorf("Couldn't create handler by %s", err)
+		log.Printf("ERROR: Couldn't make docker handler by %s", err)
+		review.Response = &v1beta1.AdmissionResponse{
+			Allowed: false,
+			Result: &v1.Status{
+				Message: fmt.Sprintf("Internal webhook server error: %s", err),
+			},
+		}
+		return err
 	}
 
 	isValid := handler.isNamespaceInWhiteList()
 	var name = ""
 	if !isValid {
+		log.Println("INFO: This pod's namespace is not in the white list")
 		isValid, name = handler.isValid()
 	}
 
 	if isValid {
+		log.Println("INFO: Pod is valid")
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: true,
 		}
 	} else {
+		log.Println("INFO: Pod is invalid")
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: false,
 			Result: &v1.Status{
