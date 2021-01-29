@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
+	types "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
 	core "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +23,7 @@ type DockerHandler struct {
 	whiteList      WhiteList
 	pod            core.Pod
 	dindPodName    string
-	signerPolicies []regv1.SignerPolicy
+	signerPolicies []types.SignerPolicy
 }
 
 type ImageInfo struct {
@@ -74,7 +75,7 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 		dindPod = pods.Items[0]
 	}
 
-	signerPolicies := &regv1.SignerPolicyList{}
+	signerPolicies := &types.SignerPolicyList{}
 	if err := clientset.RESTClient().
 		Get().AbsPath("apis/tmax.io/v1").
 		Resource("signerpolicies").
@@ -115,8 +116,10 @@ func (h *DockerHandler) isSignedImage(image string) bool {
 	notaryServer := h.findNotaryServer(imageInfo.registry)
 
 	var command string
-	if notaryServer == "docker-hub" {
+	if notaryServer == "docker.io" {
 		command = fmt.Sprintf("unset DOCKER_CONTENT_TRUST_SERVER; docker trust inspect %s:%s", imageInfo.name, imageInfo.tag)
+	} else if notaryServer == "docker-hub" {
+		command = fmt.Sprintf("unset DOCKER_CONTENT_TRUST_SERVER; docker trust inspect %s/%s:%s", imageInfo.registry, imageInfo.name, imageInfo.tag)
 	} else {
 		if err := h.loginToRegistry(imageInfo.registry); err != nil {
 			log.Printf("Couldn't login to registry named %s: by %s", imageInfo.registry, err)
@@ -261,7 +264,7 @@ func (h *DockerHandler) isNamespaceInWhiteList() bool {
 
 func (h *DockerHandler) findNotaryServer(registry string) string {
 	if registry == "docker.io" {
-		return "docker-hub"
+		return "docker.io"
 	}
 
 	var targetReg *regv1.Registry
