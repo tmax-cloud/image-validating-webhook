@@ -50,7 +50,6 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 	)
 	restCfg, _ := kubeCfg.ClientConfig()
 	clientset, _ := kubernetes.NewForConfig(restCfg)
-	regv1.AddToScheme(scheme)
 
 	imagef, err1 := ioutil.ReadFile(whitelistByImage)
 	namespacef, err2 := ioutil.ReadFile(whitelistByNamespace)
