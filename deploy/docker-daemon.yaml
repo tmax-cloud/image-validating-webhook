@@ -35,4 +35,4 @@ spec:
                   emptyDir: {}
                 - name: root-ca
                   secret:
-                      secretName: hpcd-registry-rootca
+                      secretName: registry-ca
