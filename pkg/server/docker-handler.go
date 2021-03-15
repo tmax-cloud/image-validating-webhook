@@ -93,6 +93,51 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 	}, nil
 }
 
+func (h *DockerHandler) GetPatch() *core.Pod {
+	patch := h.pod.DeepCopy()
+	for i, container := range patch.Spec.InitContainers {
+		digest := h.getDigest(container.Image)
+		if digest == "" {
+			return nil
+		}
+
+		patch.Spec.InitContainers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
+	}
+
+	for i, container := range patch.Spec.Containers {
+		digest := h.getDigest(container.Image)
+		if digest == "" {
+			return nil
+		}
+
+		patch.Spec.Containers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
+	}
+
+	return patch
+}
+
+func (h *DockerHandler) getDigest(image string) string {
+	result, err := h.execToDockerDaemon(h.makeCommand(getImageInfo(image)))
+	if err != nil {
+		log.Printf("Failed to execute command to docker daemon by %s", err)
+	}
+
+	signatures, err := getSignatures(result.OutBuffer.String())
+	if err != nil {
+		log.Printf("Failed to get signature by %s", err)
+		return ""
+	}
+
+	digest := ""
+	for _, signedTag := range signatures[0].SignedTags {
+		if signedTag.SignedTag == getImageInfo(image).tag {
+			digest = signedTag.Digest
+		}
+	}
+
+	return digest
+}
+
 func (h *DockerHandler) isValid() (bool, string) {
 	isValid := true
 	name := ""
@@ -110,10 +155,8 @@ func (h *DockerHandler) isValid() (bool, string) {
 	return isValid, name
 }
 
-func (h *DockerHandler) isSignedImage(image string) bool {
-	imageInfo := getImageInfo(image)
+func (h *DockerHandler) makeCommand(imageInfo ImageInfo) string {
 	notaryServer := h.findNotaryServer(imageInfo.registry)
-
 	var command string
 	if notaryServer == "docker.io" {
 		command = fmt.Sprintf("unset DOCKER_CONTENT_TRUST_SERVER; docker trust inspect %s:%s", imageInfo.name, imageInfo.tag)
@@ -126,7 +169,11 @@ func (h *DockerHandler) isSignedImage(image string) bool {
 		command = fmt.Sprintf("export DOCKER_CONTENT_TRUST_SERVER=%s; docker trust inspect %s/%s:%s", notaryServer, imageInfo.registry, imageInfo.name, imageInfo.tag)
 	}
 
-	result, err := h.execToDockerDaemon(command)
+	return command
+}
+
+func (h *DockerHandler) isSignedImage(image string) bool {
+	result, err := h.execToDockerDaemon(h.makeCommand(getImageInfo(image)))
 	if err != nil {
 		log.Printf("Failed to execute command to docker daemon by %s", err)
 	}

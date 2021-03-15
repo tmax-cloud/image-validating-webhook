@@ -5,9 +5,6 @@ set -e
 bash deploy/webhook-create-signed-cert.sh
 cat deploy/validating-webhook.yaml | bash deploy/webhook-patch-ca-bundle.sh > deploy/validating-webhook-ca-bundle.yaml
 
-make docker-build
-make docker-push
-
 kubectl apply -f config/crd/tmax.io_signerpolicies.yaml
 kubectl apply -f deploy/role/account.yaml
 kubectl apply -f deploy/role/role.yaml
