@@ -41,6 +41,5 @@ data:
       "operators",
       "tekton-pipelines",
       "scheduled-scaler-operator-system",
-      "cicd-system",
-      "kube-logging"
+      "cicd-system"
     ]
