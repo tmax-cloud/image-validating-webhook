@@ -19,7 +19,6 @@ data:
       "cluster-tsb-ns",
       "console-system",
       "default",
-      "example",
       "hypercloud5-system",
       "ingress-nginx",
       "ingress-nginx-shared",
@@ -32,7 +31,6 @@ data:
       "kube-system",
       "metallb-system",
       "monitoring",
-      "reg-test",
       "registry-system",
       "template",
       "tsb-ns",
@@ -41,5 +39,6 @@ data:
       "operators",
       "tekton-pipelines",
       "scheduled-scaler-operator-system",
-      "cicd-system"
+      "cicd-system",
+      "tfapplyclaim"
     ]
