@@ -44,6 +44,8 @@ func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionRevi
 		return err
 	}
 
+	pod.Namespace = review.Request.Namespace
+
 	log.Printf("INFO: Start to handle review of pod %s in %s", pod.Name, pod.Namespace)
 
 	handler, err := newDockerHandler(pod)
