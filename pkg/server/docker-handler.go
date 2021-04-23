@@ -21,7 +21,8 @@ import (
 type DockerHandler struct {
 	client         *kubernetes.Clientset
 	whiteList      WhiteList
-	pod            core.Pod
+	pod            *core.Pod
+	patch          *core.Pod
 	dindPodName    string
 	signerPolicies []types.SignerPolicy
 }
@@ -43,7 +44,7 @@ type ExecResult struct {
 	ErrBuffer *bytes.Buffer
 }
 
-func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
+func newDockerHandler(pod *core.Pod) (*DockerHandler, error) {
 	kubeCfg := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{},
@@ -87,6 +88,7 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 	return &DockerHandler{
 		client:         clientset,
 		pod:            pod,
+		patch:          pod.DeepCopy(),
 		whiteList:      WhiteList{byImages: imageList, byNamespaces: namespaceList},
 		dindPodName:    dindPod.GetName(),
 		signerPolicies: signerPolicies.Items,
@@ -94,40 +96,10 @@ func newDockerHandler(pod core.Pod) (*DockerHandler, error) {
 }
 
 func (h *DockerHandler) GetPatch() *core.Pod {
-	patch := h.pod.DeepCopy()
-	for i, container := range patch.Spec.InitContainers {
-		digest := h.getDigest(container.Image)
-		if digest == "" {
-			return nil
-		}
-
-		patch.Spec.InitContainers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
-	}
-
-	for i, container := range patch.Spec.Containers {
-		digest := h.getDigest(container.Image)
-		if digest == "" {
-			return nil
-		}
-
-		patch.Spec.Containers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
-	}
-
-	return patch
+	return h.patch
 }
 
-func (h *DockerHandler) getDigest(image string) string {
-	result, err := h.execToDockerDaemon(h.makeCommand(getImageInfo(image)))
-	if err != nil {
-		log.Printf("Failed to execute command to docker daemon by %s", err)
-	}
-
-	signatures, err := getSignatures(result.OutBuffer.String())
-	if err != nil {
-		log.Printf("Failed to get signature by %s", err)
-		return ""
-	}
-
+func getDigest(image string, signatures []Signature) string {
 	digest := ""
 	for _, signedTag := range signatures[0].SignedTags {
 		if signedTag.SignedTag == getImageInfo(image).tag {
@@ -142,13 +114,35 @@ func (h *DockerHandler) isValid() (bool, string) {
 	isValid := true
 	name := ""
 
-	containers := append(h.pod.Spec.InitContainers, h.pod.Spec.Containers...)
-	for _, container := range containers {
-		isValid = h.isImageInWhiteList(container.Image) || isValid && h.isSignedImage(container.Image)
+	for i, container := range h.pod.Spec.InitContainers {
+		if !h.isImageInWhiteList(container.Image) {
+			validation, digest := h.isSignedImage(container.Image)
+			isValid = isValid && validation
 
+			if !isValid {
+				name = container.Image
+				break
+			} else {
+				h.patch.Spec.InitContainers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
+			}
+		}
+	}
+
+	for i, container := range h.pod.Spec.Containers {
 		if !isValid {
-			name = container.Image
 			break
+		}
+
+		if !h.isImageInWhiteList(container.Image) {
+			validation, digest := h.isSignedImage(container.Image)
+			isValid = isValid && validation
+
+			if !isValid {
+				name = container.Image
+				break
+			} else {
+				h.patch.Spec.Containers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
+			}
 		}
 	}
 
@@ -172,7 +166,7 @@ func (h *DockerHandler) makeCommand(imageInfo ImageInfo) string {
 	return command
 }
 
-func (h *DockerHandler) isSignedImage(image string) bool {
+func (h *DockerHandler) isSignedImage(image string) (bool, string) {
 	result, err := h.execToDockerDaemon(h.makeCommand(getImageInfo(image)))
 	if err != nil {
 		log.Printf("Failed to execute command to docker daemon by %s", err)
@@ -185,10 +179,15 @@ func (h *DockerHandler) isSignedImage(image string) bool {
 	signatures, err := getSignatures(result.OutBuffer.String())
 	if err != nil {
 		log.Printf("Failed to get signature by %s", err)
-		return false
+		return false, ""
 	}
 
-	return h.hasMatchedSigner(signatures)
+	if h.hasMatchedSigner(signatures) {
+		digest := getDigest(image, signatures)
+		return true, digest
+	}
+
+	return false, ""
 }
 
 func (h *DockerHandler) hasMatchedSigner(signatures []Signature) bool {
