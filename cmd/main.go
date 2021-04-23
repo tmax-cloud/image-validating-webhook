@@ -15,5 +15,7 @@ func main() {
 
 	admissionController := &server.ImageValidationAdmission{}
 	webhookServer := server.GetAdmissionValidationServer(admissionController, cert, key, listenOn)
-	webhookServer.ListenAndServeTLS("", "")
+	if err := webhookServer.ListenAndServeTLS("", ""); err != nil {
+		log.Fatal(err)
+	}
 }

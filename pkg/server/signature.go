@@ -6,29 +6,34 @@ import (
 	"strings"
 )
 
+// Signature is a sign info of an image
 type Signature struct {
 	Name               string      `json:"Name"`
-	SignedTags         []SignedTag `json: "SignedTags"`
-	Signers            []Signer    `json: "Signer"`
-	AdministrativeKeys []AdminKey  `json: "AdministrativeKeys"`
+	SignedTags         []SignedTag `json:"SignedTags"`
+	Signers            []Signer    `json:"Signer"`
+	AdministrativeKeys []AdminKey  `json:"AdministrativeKeys"`
 }
 
+// SignedTag is a tag-signature info
 type SignedTag struct {
-	SignedTag string   `json: "SignedTag"`
-	Digest    string   `json: "Digest"`
-	Signers   []string `json: "Signers"`
+	SignedTag string   `json:"SignedTag"`
+	Digest    string   `json:"Digest"`
+	Signers   []string `json:"Signers"`
 }
 
+// Signer is a signer struct
 type Signer struct {
 }
 
+// AdminKey is a key for admin
 type AdminKey struct {
-	Name string `json: "Name"`
-	Keys []Key  `json: "Keys"`
+	Name string `json:"Name"`
+	Keys []Key  `json:"Keys"`
 }
 
+// Key is a key struct
 type Key struct {
-	ID string `json: "ID"`
+	ID string `json:"ID"`
 }
 
 func (s *Signature) getRepoAdminKey() string {
@@ -47,7 +52,7 @@ func getSignatures(raw string) ([]Signature, error) {
 	signaturePart := raw[start:(end + 1)]
 
 	if start < 0 || end < 0 {
-		return nil, fmt.Errorf("Raw signature format invalid")
+		return nil, fmt.Errorf("raw signature format invalid")
 	}
 
 	var signatures []Signature

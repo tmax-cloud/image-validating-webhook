@@ -1,6 +1,9 @@
+# Current version
+VERSION ?= v5.0.0
+REGISTRY ?= tmaxcloudck
 
 # Image URL to use all building/pushing image targets
-IMG ?= tmaxcloudck/image-validation-webhook
+IMG ?= $(REGISTRY)/image-validation-webhook
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -29,14 +32,14 @@ generate: controller-gen
 
 # Build the docker image
 docker-build:
-	docker build . -t ${IMG}:5.0
+	docker build . -t ${IMG}:$(VERSION)
 
 docker-build-dev:
 	docker build . -t ${IMG}:dev
 
 # Push the docker image
 docker-push:
-	docker push ${IMG}:5.0
+	docker push ${IMG}:$(VERSION)
 
 docker-push-dev:
 	docker push ${IMG}:dev
@@ -50,10 +53,60 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+# Run tests
+test: test-crd test-gen test-verify test-unit test-lint
+
+# Custom targets for CI/CD operator
+.PHONY: test-gen test-crd test-verify test-lint test-unit
+
+# Test if zz_generated.deepcopy.go file is generated
+test-gen: save-sha-gen generate compare-sha-gen
+
+# Test if crd yaml files are generated
+test-crd: save-sha-crd manifests compare-sha-crd
+
+# Verify if go.sum is valid
+test-verify: save-sha-mod verify compare-sha-mod
+
+# Test code lint
+test-lint:
+	golangci-lint run ./... -v
+
+# Unit test
+test-unit:
+	go test -v ./...
+
+save-sha-gen:
+	$(eval GENSHA=$(shell sha512sum pkg/type/zz_generated.deepcopy.go))
+
+compare-sha-gen:
+	$(eval GENSHA_AFTER=$(shell sha512sum pkg/type/zz_generated.deepcopy.go))
+	@if [ "${GENSHA_AFTER}" = "${GENSHA}" ]; then echo "zz_generated.deepcopy.go is not changed"; else echo "zz_generated.deepcopy.go file is changed"; exit 1; fi
+
+save-sha-crd:
+	$(eval CRDSHA1=$(shell sha512sum config/crd/tmax.io_signerpolicies.yaml))
+
+compare-sha-crd:
+	$(eval CRDSHA1_AFTER=$(shell sha512sum config/crd/tmax.io_signerpolicies.yaml))
+	@if [ "${CRDSHA1_AFTER}" = "${CRDSHA1}" ]; then echo "tmax.io_signerpolicies.yaml is not changed"; else echo "tmax.io_signerpolicies.yaml file is changed"; exit 1; fi
+
+save-sha-mod:
+	$(eval MODSHA=$(shell sha512sum go.mod))
+	$(eval SUMSHA=$(shell sha512sum go.sum))
+
+verify:
+	go mod verify
+
+compare-sha-mod:
+	$(eval MODSHA_AFTER=$(shell sha512sum go.mod))
+	$(eval SUMSHA_AFTER=$(shell sha512sum go.sum))
+	@if [ "${MODSHA_AFTER}" = "${MODSHA}" ]; then echo "go.mod is not changed"; else echo "go.mod file is changed"; exit 1; fi
+	@if [ "${SUMSHA_AFTER}" = "${SUMSHA}" ]; then echo "go.sum is not changed"; else echo "go.sum file is changed"; exit 1; fi

@@ -8,7 +8,6 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	core "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -20,9 +19,7 @@ const (
 )
 
 // ImageValidationAdmission is ...
-type ImageValidationAdmission struct {
-	client *kubernetes.Clientset
-}
+type ImageValidationAdmission struct{}
 
 type patchOperation struct {
 	Op    string      `json:"op"`

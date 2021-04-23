@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// DockerHandler handles overall process to check signs
 type DockerHandler struct {
 	client         *kubernetes.Clientset
 	whiteList      WhiteList
@@ -27,18 +28,20 @@ type DockerHandler struct {
 	signerPolicies []types.SignerPolicy
 }
 
+// ImageInfo stores an image's info
 type ImageInfo struct {
 	registry string
 	name     string
 	tag      string
 }
 
+// WhiteList stores whitelisted images/namespaces
 type WhiteList struct {
 	byImages     []string
 	byNamespaces []string
 }
 
-// ExecResult is ...
+// ExecResult is a result of cli command
 type ExecResult struct {
 	OutBuffer *bytes.Buffer
 	ErrBuffer *bytes.Buffer
@@ -95,6 +98,7 @@ func newDockerHandler(pod *core.Pod) (*DockerHandler, error) {
 	}, nil
 }
 
+// GetPatch generates a patch to update pod spec
 func (h *DockerHandler) GetPatch() *core.Pod {
 	return h.patch
 }

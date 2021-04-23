@@ -39,6 +39,7 @@ func (admissionControllerServer *AdmissionControllerServer) ServeHTTP(writer htt
 		errMsg := fmt.Sprintf("Couldn't read request by %s", err)
 		log.Println(errMsg)
 		http.Error(writer, errMsg, http.StatusBadRequest)
+		return
 	}
 
 	review := &v1beta1.AdmissionReview{}
@@ -53,18 +54,20 @@ func (admissionControllerServer *AdmissionControllerServer) ServeHTTP(writer htt
 		}
 	}
 
-	admissionControllerServer.AdmissionController.HandleAdmission(review)
+	_ = admissionControllerServer.AdmissionController.HandleAdmission(review)
 	responseInBytes, err := json.Marshal(review)
 	if err != nil {
 		errMsg := fmt.Sprintf("Couldn't encode response by %s", err)
 		log.Println(errMsg)
 		http.Error(writer, errMsg, http.StatusInternalServerError)
+		return
 	}
 
 	if _, err := writer.Write(responseInBytes); err != nil {
 		errMsg := fmt.Sprintf("Couldn't write response by %s", err)
 		log.Println(errMsg)
 		http.Error(writer, errMsg, http.StatusInternalServerError)
+		return
 	}
 }
 
