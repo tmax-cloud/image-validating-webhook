@@ -33,7 +33,7 @@ type patchOperation struct {
 // HandleAdmission is ...
 func (a *ImageValidationAdmission) HandleAdmission(review *v1beta1.AdmissionReview) error {
 	pod := &core.Pod{}
-	if err := json.Unmarshal(review.Request.Object.Raw, &pod); err != nil {
+	if err := json.Unmarshal(review.Request.Object.Raw, pod); err != nil {
 		log.Printf("unmarshaling request failed with %s", err)
 		review.Response = &v1beta1.AdmissionResponse{
 			Allowed: false,

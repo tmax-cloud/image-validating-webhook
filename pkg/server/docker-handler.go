@@ -111,28 +111,24 @@ func getDigest(image string, signatures []Signature) string {
 }
 
 func (h *DockerHandler) isValid() (bool, string) {
-	isValid := true
-	name := ""
+	isValid, name := h.addDigestWhenImageValid(true)
 
-	for i, container := range h.pod.Spec.InitContainers {
-		if !h.isImageInWhiteList(container.Image) {
-			validation, digest := h.isSignedImage(container.Image)
-			isValid = isValid && validation
-
-			if !isValid {
-				name = container.Image
-				break
-			} else {
-				h.patch.Spec.InitContainers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
-			}
-		}
+	if isValid {
+		isValid, name = h.addDigestWhenImageValid(false)
 	}
 
-	for i, container := range h.pod.Spec.Containers {
-		if !isValid {
-			break
-		}
+	return isValid, name
+}
 
+func (h *DockerHandler) addDigestWhenImageValid(isInitContainer bool) (bool, string) {
+	isValid := true
+	name := ""
+	containers := h.pod.Spec.InitContainers
+	if !isInitContainer {
+		containers = h.pod.Spec.Containers
+	}
+
+	for i, container := range containers {
 		if !h.isImageInWhiteList(container.Image) {
 			validation, digest := h.isSignedImage(container.Image)
 			isValid = isValid && validation
@@ -141,7 +137,11 @@ func (h *DockerHandler) isValid() (bool, string) {
 				name = container.Image
 				break
 			} else {
-				h.patch.Spec.Containers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
+				if isInitContainer {
+					h.patch.Spec.InitContainers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
+				} else {
+					h.patch.Spec.Containers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
+				}
 			}
 		}
 	}
