@@ -10,6 +10,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+// ExecCmd executes a cli command - TODO: replace it
 func ExecCmd(podName, containerName, namespace string,
 	command string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
 	kubeCfg := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(

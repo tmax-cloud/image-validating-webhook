@@ -4,6 +4,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// SignerPolicySpec is a spec of SignerPolicy
 type SignerPolicySpec struct {
 	Signers []string `json:"signers"`
 }
