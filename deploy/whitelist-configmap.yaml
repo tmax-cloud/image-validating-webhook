@@ -40,5 +40,6 @@ data:
       "tekton-pipelines",
       "scheduled-scaler-operator-system",
       "cicd-system",
-      "tfapplyclaim"
+      "tfapplyclaim",
+      "hyperauth"
     ]
