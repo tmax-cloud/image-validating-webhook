@@ -3,17 +3,15 @@ package server
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"strings"
 
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
-	types "github.com/tmax-cloud/image-validating-webhook/pkg/type"
+	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
-	core "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -22,10 +20,10 @@ import (
 type DockerHandler struct {
 	client         *kubernetes.Clientset
 	whiteList      WhiteList
-	pod            *core.Pod
-	patch          *core.Pod
+	pod            *corev1.Pod
+	patch          *corev1.Pod
 	dindPodName    string
-	signerPolicies []types.SignerPolicy
+	signerPolicies []whv1.SignerPolicy
 }
 
 // ImageInfo stores an image's info
@@ -35,19 +33,13 @@ type ImageInfo struct {
 	tag      string
 }
 
-// WhiteList stores whitelisted images/namespaces
-type WhiteList struct {
-	byImages     []string
-	byNamespaces []string
-}
-
 // ExecResult is a result of cli command
 type ExecResult struct {
 	OutBuffer *bytes.Buffer
 	ErrBuffer *bytes.Buffer
 }
 
-func newDockerHandler(pod *core.Pod) (*DockerHandler, error) {
+func newDockerHandler(pod *corev1.Pod) (*DockerHandler, error) {
 	kubeCfg := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{},
@@ -55,30 +47,21 @@ func newDockerHandler(pod *core.Pod) (*DockerHandler, error) {
 	restCfg, _ := kubeCfg.ClientConfig()
 	clientset, _ := kubernetes.NewForConfig(restCfg)
 
-	imagef, err1 := ioutil.ReadFile(whitelistByImage)
-	namespacef, err2 := ioutil.ReadFile(whitelistByNamespace)
-	if err1 != nil || err2 != nil {
-		return nil, fmt.Errorf("reading white list config file failed")
+	// Read whitelist
+	wl, err := ReadWhiteList(clientset)
+	if err != nil {
+		return nil, err
 	}
 
-	var imageList, namespaceList []string
-	if err := json.Unmarshal(imagef, &imageList); err != nil {
-		return nil, fmt.Errorf("unmarshaling image white list failed by %s", err)
-	}
-
-	if err := json.Unmarshal(namespacef, &namespaceList); err != nil {
-		return nil, fmt.Errorf("unmarshaling namespace white list failed by %s", err)
-	}
-
-	pods, _ := clientset.CoreV1().Pods(dindNamespace).List(context.TODO(), v1.ListOptions{
+	pods, _ := clientset.CoreV1().Pods(dindNamespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("app=%s", dindDeployment),
 	})
-	dindPod := core.Pod{}
+	dindPod := corev1.Pod{}
 	if len(pods.Items) > 0 {
 		dindPod = pods.Items[0]
 	}
 
-	signerPolicies := &types.SignerPolicyList{}
+	signerPolicies := &whv1.SignerPolicyList{}
 	if err := clientset.RESTClient().
 		Get().AbsPath("apis/tmax.io/v1").
 		Resource("signerpolicies").
@@ -92,14 +75,14 @@ func newDockerHandler(pod *core.Pod) (*DockerHandler, error) {
 		client:         clientset,
 		pod:            pod,
 		patch:          pod.DeepCopy(),
-		whiteList:      WhiteList{byImages: imageList, byNamespaces: namespaceList},
+		whiteList:      *wl,
 		dindPodName:    dindPod.GetName(),
 		signerPolicies: signerPolicies.Items,
 	}, nil
 }
 
 // GetPatch generates a patch to update pod spec
-func (h *DockerHandler) GetPatch() *core.Pod {
+func (h *DockerHandler) GetPatch() *corev1.Pod {
 	return h.patch
 }
 
@@ -266,13 +249,13 @@ func (h *DockerHandler) loginToRegistry(registry string) error {
 	return fmt.Errorf("There's no pullSecret to login to registry named %s", registry)
 }
 
-func (h *DockerHandler) getSecret(secretName string) (*core.Secret, error) {
-	allSecrets, err := h.client.CoreV1().Secrets("").List(context.TODO(), v1.ListOptions{})
+func (h *DockerHandler) getSecret(secretName string) (*corev1.Secret, error) {
+	allSecrets, err := h.client.CoreV1().Secrets("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	var result core.Secret
+	var result corev1.Secret
 	exist := false
 	for _, secret := range allSecrets.Items {
 		if secret.Name == secretName {

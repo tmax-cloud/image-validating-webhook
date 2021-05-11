@@ -11,11 +11,9 @@ import (
 )
 
 const (
-	dindDeployment       = "docker-daemon"
-	dindContainer        = "dind-daemon"
-	dindNamespace        = "registry-system"
-	whitelistByImage     = "/etc/webhook/config/whitelist-image.json"
-	whitelistByNamespace = "/etc/webhook/config/whitelist-namespace.json"
+	dindDeployment = "docker-daemon"
+	dindContainer  = "dind-daemon"
+	dindNamespace  = "registry-system"
 )
 
 // ImageValidationAdmission is ...
