@@ -529,3 +529,70 @@ func testNotaryHandler() http.Handler {
 	})
 	return m
 }
+
+type imageWhiteListTestCase struct {
+	list  []imageRef
+	image string
+
+	expectedWhitelisted bool
+}
+
+func TestHandler_IsImageInWhiteList(t *testing.T) {
+	tc := map[string]imageWhiteListTestCase{
+		"noTagWhiteListed": {
+			list:                []imageRef{{name: "notary"}},
+			image:               "registry-test.registry.ipip.nip.io/notary",
+			expectedWhitelisted: true,
+		},
+		"noTagNotWhiteListed": {
+			list:                []imageRef{{name: "notary"}},
+			image:               "registry-test.registry.ipip.nip.io/notary-2",
+			expectedWhitelisted: false,
+		},
+		"yesTagNotWhiteListed": {
+			list:                []imageRef{{name: "notary", tag: "test"}},
+			image:               "registry-test.registry.ipip.nip.io/notary",
+			expectedWhitelisted: false,
+		},
+		"yesTagWhiteListed": {
+			list:                []imageRef{{name: "notary", tag: "test"}},
+			image:               "registry-test.registry.ipip.nip.io/notary:test",
+			expectedWhitelisted: true,
+		},
+		"registry": {
+			list:                []imageRef{{name: "registry"}},
+			image:               "registry-test.registry.ipip.nip.io/test-image",
+			expectedWhitelisted: false,
+		},
+		"wildcard": {
+			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "*"}},
+			image:               "registry-2.registry.ipip.nip.io/test-image",
+			expectedWhitelisted: true,
+		},
+		"wildcard2": {
+			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "*"}},
+			image:               "registry-2.registry.ipip.nip.io/test-image:test",
+			expectedWhitelisted: true,
+		},
+		"containsSlashSuccess": {
+			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "tmaxcloudck/notary_mysql", tag: "0.6.2-rc2"}},
+			image:               "registry-2.registry.ipip.nip.io/tmaxcloudck/notary_mysql:0.6.2-rc2",
+			expectedWhitelisted: true,
+		},
+		"containsSlashFailure": {
+			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "tmaxcloudck/notary_mysql", tag: "0.6.2-rc2"}},
+			image:               "registry-2.registry.ipip.nip.io/tmaxcloudck/notary_mysql:0.6.2-rc1",
+			expectedWhitelisted: false,
+		},
+	}
+
+	for name, c := range tc {
+		t.Run(name, func(t *testing.T) {
+			h := &validator{
+				whiteList: WhiteList{byImages: c.list},
+			}
+			isWhitelisted := h.isImageInWhiteList(c.image)
+			assert.Equal(t, c.expectedWhitelisted, isWhitelisted)
+		})
+	}
+}
