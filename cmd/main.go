@@ -2,11 +2,14 @@ package main
 
 import (
 	"log"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/tmax-cloud/image-validating-webhook/pkg/server"
 )
 
 func main() {
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	log.Println("Starting server ...")
 
 	cert := "/etc/webhook/certs/cert.pem"

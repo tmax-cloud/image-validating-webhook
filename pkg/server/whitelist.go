@@ -15,30 +15,40 @@ import (
 const (
 	whitelistConfigMap = "image-validation-webhook-whitelist"
 
-	whiteListDir = "/etc/webhook/config/"
-
 	whitelistByImage     = "whitelist-images"
 	whitelistByNamespace = "whitelist-namespaces"
 
-	whitelistByImageFile     = whiteListDir + whitelistByImage
-	whitelistByNamespaceFile = whiteListDir + whitelistByNamespace
-
 	whitelistByImageLegacy     = "whitelist-image.json"
 	whitelistByNamespaceLegacy = "whitelist-namespace.json"
-
-	whitelistByImageLegacyFile     = whiteListDir + whitelistByImageLegacy
-	whitelistByNamespaceLegacyFile = whiteListDir + whitelistByNamespaceLegacy
 )
 
 const (
 	delimiter = "\n"
 )
 
+var whiteListDir = "/etc/webhook/config/"
+
+func whitelistByImageFile() string {
+	return whiteListDir + whitelistByImage
+}
+
+func whitelistByNamespaceFile() string {
+	return whiteListDir + whitelistByNamespace
+}
+
+func whitelistByImageLegacyFile() string {
+	return whiteListDir + whitelistByImageLegacy
+}
+
+func whitelistByNamespaceLegacyFile() string {
+	return whiteListDir + whitelistByNamespaceLegacy
+}
+
 // ReadWhiteList reads whitelist from config map files
-func ReadWhiteList(clientSet *kubernetes.Clientset) (*WhiteList, error) {
+func ReadWhiteList(clientSet kubernetes.Interface) (*WhiteList, error) {
 	wl := &WhiteList{}
 	// Read Image whitelist
-	imagef, err := ioutil.ReadFile(whitelistByImageFile)
+	imagef, err := ioutil.ReadFile(whitelistByImageFile())
 	if err != nil {
 		// If is NOT notFound, return error
 		if !os.IsNotExist(err) {
@@ -46,7 +56,7 @@ func ReadWhiteList(clientSet *kubernetes.Clientset) (*WhiteList, error) {
 		}
 
 		// Fallback to legacy
-		imageLegacyf, err := ioutil.ReadFile(whitelistByImageLegacyFile)
+		imageLegacyf, err := ioutil.ReadFile(whitelistByImageLegacyFile())
 		if err != nil {
 			return nil, err
 		}
@@ -60,7 +70,7 @@ func ReadWhiteList(clientSet *kubernetes.Clientset) (*WhiteList, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := clientSet.CoreV1().ConfigMaps(dindNamespace).Patch(context.Background(), whitelistConfigMap, types.StrategicMergePatchType, b, metav1.PatchOptions{}); err != nil {
+		if _, err := clientSet.CoreV1().ConfigMaps(registryNamespace).Patch(context.Background(), whitelistConfigMap, types.StrategicMergePatchType, b, metav1.PatchOptions{}); err != nil {
 			return nil, err
 		}
 	} else {
@@ -68,7 +78,7 @@ func ReadWhiteList(clientSet *kubernetes.Clientset) (*WhiteList, error) {
 	}
 
 	// Read
-	namespacef, err := ioutil.ReadFile(whitelistByNamespaceFile)
+	namespacef, err := ioutil.ReadFile(whitelistByNamespaceFile())
 	if err != nil {
 		// If is NOT notFound, return error
 		if !os.IsNotExist(err) {
@@ -76,7 +86,7 @@ func ReadWhiteList(clientSet *kubernetes.Clientset) (*WhiteList, error) {
 		}
 
 		// Fallback to legacy
-		namespaceLegacyf, err := ioutil.ReadFile(whitelistByNamespaceLegacyFile)
+		namespaceLegacyf, err := ioutil.ReadFile(whitelistByNamespaceLegacyFile())
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +100,7 @@ func ReadWhiteList(clientSet *kubernetes.Clientset) (*WhiteList, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := clientSet.CoreV1().ConfigMaps(dindNamespace).Patch(context.Background(), whitelistConfigMap, types.StrategicMergePatchType, b, metav1.PatchOptions{}); err != nil {
+		if _, err := clientSet.CoreV1().ConfigMaps(registryNamespace).Patch(context.Background(), whitelistConfigMap, types.StrategicMergePatchType, b, metav1.PatchOptions{}); err != nil {
 			return nil, err
 		}
 	} else {

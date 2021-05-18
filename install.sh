@@ -10,7 +10,6 @@ kubectl apply -f deploy/role/account.yaml
 kubectl apply -f deploy/role/role.yaml
 kubectl apply -f deploy/role/role-binding.yaml
 
-kubectl apply -f deploy/docker-daemon.yaml
 kubectl apply -f deploy/whitelist-configmap.yaml
 kubectl apply -f deploy/deployment.yaml
 kubectl apply -f deploy/service.yaml

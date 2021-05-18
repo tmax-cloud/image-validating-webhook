@@ -6,7 +6,6 @@ kubectl delete -f deploy/validating-webhook-ca-bundle.yaml
 kubectl delete -f deploy/service.yaml
 kubectl delete -f deploy/deployment.yaml
 kubectl delete -f deploy/whitelist-configmap.yaml
-kubectl delete -f deploy/docker-daemon.yaml
 
 kubectl delete -f deploy/role/role-binding.yaml
 kubectl delete -f deploy/role/role.yaml
