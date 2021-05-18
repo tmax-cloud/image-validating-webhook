@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
@@ -69,7 +70,7 @@ func (s *ImagePullSecret) GetHostBasicAuth(host string) (string, error) {
 	username, isUserPresent := loginAuth[DockerConfigUserKey]
 	password, isPasswordPresent := loginAuth[DockerConfigPasswordKey]
 	if isUserPresent && isPasswordPresent {
-		return fmt.Sprintf("%s:%s", username, password), nil
+		return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password))), nil
 	}
 	return "", fmt.Errorf("there is neither basic auth nor id/pw in docker config json for host %s", host)
 }

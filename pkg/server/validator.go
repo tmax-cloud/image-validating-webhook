@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
 	"github.com/tmax-cloud/registry-operator/pkg/image"
@@ -191,7 +190,7 @@ func (h *validator) getBasicAuthForRegistry(host string) (string, error) {
 			continue
 		}
 
-		return base64.StdEncoding.EncodeToString([]byte(basicAuth)), nil
+		return basicAuth, nil
 	}
 
 	// DO NOT return error - the image may be public

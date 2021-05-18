@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/base64"
 	"github.com/bmizerany/assert"
 	corev1 "k8s.io/api/core/v1"
 	"reflect"
@@ -143,7 +144,7 @@ func TestImagePullSecret_GetHostBasicAuth(t *testing.T) {
 			auths: map[string]DockerLoginCredential{
 				"https://found-host": {"user": "testID", "password": "testPW"},
 			},
-			expectedAuth:        "testID:testPW",
+			expectedAuth:        base64.StdEncoding.EncodeToString([]byte("testID:testPW")),
 			expectedErrorOccurs: false,
 			expectedErrorString: "",
 		},
