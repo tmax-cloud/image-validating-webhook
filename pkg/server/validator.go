@@ -9,7 +9,6 @@ import (
 	restclient "k8s.io/client-go/rest"
 	"log"
 	"math/rand"
-	"strings"
 	"time"
 
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
@@ -200,14 +199,19 @@ func (h *validator) getBasicAuthForRegistry(host string) (string, error) {
 }
 
 func (h *validator) isImageInWhiteList(imageUri string) bool {
-	img, err := image.NewImage(imageUri, "", "", nil)
+	img, err := parseImage(imageUri)
 	if err != nil {
 		log.Println(err)
 		return false
 	}
-	validImageName := fmt.Sprintf("%s/%s:%s", img.Host, img.Name, img.Tag)
-	for _, whiteListImage := range h.whiteList.byImages {
-		if strings.Contains(validImageName, whiteListImage) {
+
+	for _, i := range h.whiteList.byImages {
+		match := (i.host == "" || i.host == img.host) &&
+			(i.name == "*" || i.name == img.name) &&
+			(i.tag == "" || i.tag == img.tag) &&
+			(i.digest == "" || i.digest == img.digest)
+
+		if match {
 			return true
 		}
 	}
