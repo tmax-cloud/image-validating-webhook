@@ -16,7 +16,10 @@ func main() {
 	key := "/etc/webhook/certs/key.pem"
 	listenOn := "0.0.0.0:8443"
 
-	admissionController := &server.ImageValidationAdmission{}
+	admissionController, err := server.NewImageValidationAdmissionHandler()
+	if err != nil {
+		log.Fatal(err)
+	}
 	webhookServer := server.GetAdmissionValidationServer(admissionController, cert, key, listenOn)
 	if err := webhookServer.ListenAndServeTLS("", ""); err != nil {
 		log.Fatal(err)

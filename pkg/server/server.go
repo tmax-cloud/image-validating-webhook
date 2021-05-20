@@ -5,18 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"k8s.io/client-go/kubernetes/scheme"
 	"log"
 	"net/http"
 
 	"k8s.io/api/admission/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-)
-
-var (
-	scheme = runtime.NewScheme()
-	codecs = serializer.NewCodecFactory(scheme)
 )
 
 // AdmissionController is ...
@@ -77,7 +72,7 @@ func GetAdmissionValidationServer(admissionController AdmissionController, tlsCe
 	mux := http.NewServeMux()
 	mux.Handle("/validate", &AdmissionControllerServer{
 		AdmissionController: admissionController,
-		Decoder:             codecs.UniversalDeserializer(),
+		Decoder:             scheme.Codecs.UniversalDeserializer(),
 	})
 
 	server := &http.Server{

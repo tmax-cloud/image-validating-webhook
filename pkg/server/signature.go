@@ -49,7 +49,13 @@ func (s *Signature) getRepoAdminKey() string {
 	return ""
 }
 
-func fetchSignature(img *image.Image, notaryServer string) (*Signature, error) {
+func fetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error) {
+	img, err := image.NewImage(imageUri, "", basicAuth, nil)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
 	// Use notary client
 	tempDir := fmt.Sprintf("%s/notary/%s", os.TempDir(), randomString(10))
 	not, err := trust.NewReadOnly(img, notaryServer, tempDir)
