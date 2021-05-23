@@ -30,7 +30,4 @@ spec:
                 - name: webhook-certs
                   secret:
                     secretName: image-validation-admission-certs
-                - name: whitelist
-                  configMap:
-                    name: image-validation-webhook-whitelist                      
             serviceAccountName: image-validation-webhook

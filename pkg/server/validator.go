@@ -4,64 +4,59 @@ import (
 	"context"
 	"fmt"
 	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
-	"github.com/tmax-cloud/registry-operator/pkg/image"
+	"k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
 	"log"
 	"math/rand"
 	"time"
 
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
-	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-// validator handles overall process to check signs
-type validator struct {
-	client         kubernetes.Interface
-	restClient     restclient.Interface
-	pod            *corev1.Pod
-	patch          *corev1.Pod
-	whiteList      WhiteList
-	signerPolicies []whv1.SignerPolicy
-
-	findNotaryServer findNotaryServerFn
+func init() {
+	if err := whv1.AddToScheme(scheme.Scheme); err != nil {
+		log.Fatal(err)
+	}
 }
 
-type findNotaryServerFn func(registryHost, namespace string) string
+// validator handles overall process to check signs
+type validator struct {
+	client     kubernetes.Interface
+	restClient restclient.Interface
 
-func newValidator(clientset kubernetes.Interface, restClient restclient.Interface, findNotaryFn findNotaryServerFn, pod *corev1.Pod) (*validator, error) {
-	// Read whitelist
-	wl, err := ReadWhiteList(clientset)
+	findNotaryServer findNotaryServerFn
+
+	signerPolicyCache *SignerPolicyCache
+	whiteList         *WhiteList
+}
+
+type findNotaryServerFn func(registryHost string) string
+
+func newValidator(clientset kubernetes.Interface, restClient restclient.Interface, findNotaryFn findNotaryServerFn) (*validator, error) {
+	v := &validator{
+		client:           clientset,
+		restClient:       restClient,
+		findNotaryServer: findNotaryFn,
+	}
+
+	var err error
+
+	// Initiate SignerPolicy cache
+	v.signerPolicyCache, err = newSignerPolicyCache(restClient)
 	if err != nil {
 		return nil, err
 	}
 
-	signerPolicies := &whv1.SignerPolicyList{}
-	if err := restClient.
-		Get().AbsPath("apis/tmax.io/v1").
-		Resource("signerpolicies").
-		Namespace(pod.Namespace).
-		Do(context.Background()).
-		Into(signerPolicies); err != nil {
-		return nil, fmt.Errorf("signer policies error, %s", err)
+	// Initiate WhiteList cache
+	v.whiteList, err = newWhiteList(clientset)
+	if err != nil {
+		return nil, err
 	}
 
-	return &validator{
-		client:           clientset,
-		restClient:       restClient,
-		pod:              pod,
-		patch:            pod.DeepCopy(),
-		whiteList:        *wl,
-		signerPolicies:   signerPolicies.Items,
-		findNotaryServer: findNotaryFn,
-	}, nil
-}
-
-// GetPatch generates a patch to update pod spec
-func (h *validator) GetPatch() *corev1.Pod {
-	return h.patch
+	return v, nil
 }
 
 func getDigest(tag string, signature Signature) string {
@@ -75,16 +70,21 @@ func getDigest(tag string, signature Signature) string {
 	return digest
 }
 
-// IsValid checks if images of initContainers and containers are valid
-func (h *validator) IsValid() (bool, string, error) {
+// CheckIsValidAndAddDigest checks if images of initContainers and containers are valid
+func (h *validator) CheckIsValidAndAddDigest(pod *corev1.Pod) (bool, string, error) {
+	// Check namespace whitelist
+	if h.whiteList.IsNamespaceWhiteListed(pod.Namespace) {
+		return true, "", nil
+	}
+
 	// Check initContainers
-	if isValid, name, err := h.addDigestWhenImageValid(h.patch.Spec.InitContainers); err != nil {
+	if isValid, name, err := h.addDigestWhenImageValid(pod.Spec.InitContainers, pod.Namespace, pod.Spec.ImagePullSecrets); err != nil {
 		return false, "", err
 	} else if !isValid {
 		return false, name, nil
 	}
 	// Check containers
-	if isValid, name, err := h.addDigestWhenImageValid(h.patch.Spec.Containers); err != nil {
+	if isValid, name, err := h.addDigestWhenImageValid(pod.Spec.Containers, pod.Namespace, pod.Spec.ImagePullSecrets); err != nil {
 		return false, "", err
 	} else if !isValid {
 		return false, name, nil
@@ -93,88 +93,63 @@ func (h *validator) IsValid() (bool, string, error) {
 	return true, "", nil
 }
 
-func (h *validator) addDigestWhenImageValid(containers []corev1.Container) (bool, string, error) {
+func (h *validator) addDigestWhenImageValid(containers []corev1.Container, namespace string, pullSecrets []corev1.LocalObjectReference) (bool, string, error) {
 	for i, container := range containers {
-		if !h.isImageInWhiteList(container.Image) {
-			isValid, digest, err := h.isSignedImage(container.Image)
-			if err != nil {
-				return false, "", err
-			}
-			if !isValid {
+		// Check if it's whitelisted
+		if h.whiteList.IsImageWhiteListed(container.Image) {
+			continue
+		}
+
+		ref, err := parseImage(container.Image)
+		if err != nil {
+			return false, "", err
+		}
+
+		// Get registry basic auth
+		basicAuth, err := h.getBasicAuthForRegistry(ref.host, namespace, pullSecrets)
+		if err != nil {
+			return false, "", err
+		}
+
+		// Get trust info of the image
+		sig, err := fetchSignature(container.Image, basicAuth, h.findNotaryServer(ref.host))
+		if err != nil {
+			log.Println(err)
+			return false, "", err
+		}
+		// sig is nil if it's not signed
+		if sig == nil {
+			return false, container.Image, nil
+		}
+
+		// Check if it meets signer policy
+		if h.hasMatchedSigner(*sig, namespace) {
+			digest := getDigest(ref.tag, *sig)
+
+			// If digest is different from user-specified one, return error
+			if ref.digest != "" && ref.digest != digest {
 				return false, container.Image, nil
 			}
-			containers[i].Image = fmt.Sprintf("%s@sha256:%s", container.Image, digest)
+
+			ref.digest = digest
+			containers[i].Image = ref.String()
+			return true, "", nil
 		}
+
+		// Does NOT match signer policy
+		return false, container.Image, nil
 	}
 
 	return true, "", nil
 }
 
-func (h *validator) isSignedImage(imageUri string) (bool, string, error) {
-	img, err := image.NewImage(imageUri, "", "", nil)
-	if err != nil {
-		log.Println(err)
-		return false, "", err
-	}
-
-	// Get registry basic auth
-	img.BasicAuth, err = h.getBasicAuthForRegistry(img.Host)
-	if err != nil {
-		log.Println(err)
-		return false, "", err
-	}
-
-	// Get trust info of the image
-	sig, err := fetchSignature(img, h.findNotaryServer(img.Host, h.pod.Namespace))
-	if err != nil {
-		log.Println(err)
-		return false, "", err
-	}
-
-	// If not signed, sig is nil
-	if sig == nil {
-		return false, "", nil
-	}
-
-	// Check if it meets signer policy
-	if h.hasMatchedSigner(*sig) {
-		digest := getDigest(img.Tag, *sig)
-		return true, digest, nil
-	}
-
-	// Is NOT valid if it does not match any policy
-	return false, "", nil
+func (h *validator) hasMatchedSigner(signature Signature, namespace string) bool {
+	return h.signerPolicyCache.doesMatchPolicy(signature.getRepoAdminKey(), namespace)
 }
 
-func (h *validator) hasMatchedSigner(signature Signature) bool {
-	// If no policy but is signed, it's valid
-	if len(h.signerPolicies) == 0 {
-		return true
-	}
-
-	key := signature.getRepoAdminKey()
-
-	for _, signerPolicy := range h.signerPolicies {
-		for _, signerName := range signerPolicy.Spec.Signers {
-			signer := &regv1.SignerKey{}
-			if err := h.restClient.Get().AbsPath("apis/tmax.io/v1").Resource("signerkeys").Name(signerName).Do(context.Background()).Into(signer); err != nil {
-				log.Printf("signer getting error by %s", err)
-			}
-
-			for _, targetKey := range signer.Spec.Targets {
-				if targetKey.ID == key {
-					return true
-				}
-			}
-		}
-	}
-
-	return false
-}
-
-func (h *validator) getBasicAuthForRegistry(host string) (string, error) {
-	for _, pullSecret := range h.pod.Spec.ImagePullSecrets {
-		secret, err := h.client.CoreV1().Secrets(h.pod.Namespace).Get(context.Background(), pullSecret.Name, metav1.GetOptions{})
+func (h *validator) getBasicAuthForRegistry(host, namespace string, pullSecrets []corev1.LocalObjectReference) (string, error) {
+	for _, pullSecret := range pullSecrets {
+		secret, err := h.client.CoreV1().Secrets(namespace).Get(context.Background(), pullSecret.Name, metav1.GetOptions{})
 		if err != nil {
 			return "", fmt.Errorf("couldn't get secret named %s by %s", pullSecret.Name, err)
 		}
@@ -195,35 +170,6 @@ func (h *validator) getBasicAuthForRegistry(host string) (string, error) {
 
 	// DO NOT return error - the image may be public
 	return "", nil
-}
-
-func (h *validator) isImageInWhiteList(imageUri string) bool {
-	img, err := parseImage(imageUri)
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-
-	for _, i := range h.whiteList.byImages {
-		match := (i.host == "" || i.host == img.host) &&
-			(i.name == "*" || i.name == img.name) &&
-			(i.tag == "" || i.tag == img.tag) &&
-			(i.digest == "" || i.digest == img.digest)
-
-		if match {
-			return true
-		}
-	}
-	return false
-}
-
-func (h *validator) IsNamespaceInWhiteList(ns string) bool {
-	for _, whiteListNamespace := range h.whiteList.byNamespaces {
-		if ns == whiteListNamespace {
-			return true
-		}
-	}
-	return false
 }
 
 func (h *validator) findRegistryServer(registry string) string {

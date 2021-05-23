@@ -5,6 +5,71 @@ import (
 	"testing"
 )
 
+type imageWhiteListTestCase struct {
+	list  []imageRef
+	image string
+
+	expectedWhitelisted bool
+}
+
+func TestWhiteList_IsImageWhiteListed(t *testing.T) {
+	tc := map[string]imageWhiteListTestCase{
+		"noTagWhiteListed": {
+			list:                []imageRef{{name: "notary"}},
+			image:               "registry-test.registry.ipip.nip.io/notary",
+			expectedWhitelisted: true,
+		},
+		"noTagNotWhiteListed": {
+			list:                []imageRef{{name: "notary"}},
+			image:               "registry-test.registry.ipip.nip.io/notary-2",
+			expectedWhitelisted: false,
+		},
+		"yesTagNotWhiteListed": {
+			list:                []imageRef{{name: "notary", tag: "test"}},
+			image:               "registry-test.registry.ipip.nip.io/notary",
+			expectedWhitelisted: false,
+		},
+		"yesTagWhiteListed": {
+			list:                []imageRef{{name: "notary", tag: "test"}},
+			image:               "registry-test.registry.ipip.nip.io/notary:test",
+			expectedWhitelisted: true,
+		},
+		"registry": {
+			list:                []imageRef{{name: "registry"}},
+			image:               "registry-test.registry.ipip.nip.io/test-image",
+			expectedWhitelisted: false,
+		},
+		"wildcard": {
+			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "*"}},
+			image:               "registry-2.registry.ipip.nip.io/test-image",
+			expectedWhitelisted: true,
+		},
+		"wildcard2": {
+			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "*"}},
+			image:               "registry-2.registry.ipip.nip.io/test-image:test",
+			expectedWhitelisted: true,
+		},
+		"containsSlashSuccess": {
+			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "tmaxcloudck/notary_mysql", tag: "0.6.2-rc2"}},
+			image:               "registry-2.registry.ipip.nip.io/tmaxcloudck/notary_mysql:0.6.2-rc2",
+			expectedWhitelisted: true,
+		},
+		"containsSlashFailure": {
+			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "tmaxcloudck/notary_mysql", tag: "0.6.2-rc2"}},
+			image:               "registry-2.registry.ipip.nip.io/tmaxcloudck/notary_mysql:0.6.2-rc1",
+			expectedWhitelisted: false,
+		},
+	}
+
+	for name, c := range tc {
+		t.Run(name, func(t *testing.T) {
+			w := &WhiteList{byImages: c.list}
+			isWhitelisted := w.IsImageWhiteListed(c.image)
+			assert.Equal(t, c.expectedWhitelisted, isWhitelisted)
+		})
+	}
+}
+
 type whitelistTestCase struct {
 	marshalledImage   string
 	unmarshalledImage []imageRef
@@ -35,8 +100,8 @@ default`,
 				byNamespaces: c.unmarshalledNs,
 			}
 			img, ns := wl.Marshal()
-			assert.Equal(t, c.marshalledImage, string(img), "image")
-			assert.Equal(t, c.marshalledNs, string(ns), "ns")
+			assert.Equal(t, c.marshalledImage, img, "image")
+			assert.Equal(t, c.marshalledNs, ns, "ns")
 		})
 	}
 }
@@ -59,7 +124,7 @@ default`,
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
-			if err := wl.Unmarshal([]byte(c.marshalledImage), []byte(c.marshalledNs)); err != nil {
+			if err := wl.Unmarshal(c.marshalledImage, c.marshalledNs); err != nil {
 				t.Fatal(err)
 			}
 			assert.Equal(t, c.unmarshalledImage, wl.byImages, "image")
@@ -84,7 +149,7 @@ img-validating-webhook`,
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
-			if err := wl.UnmarshalImage([]byte(c.marshalledImage)); err != nil {
+			if err := wl.UnmarshalImage(c.marshalledImage); err != nil {
 				t.Fatal(err)
 			}
 			assert.Equal(t, c.unmarshalledImage, wl.byImages, "result")
@@ -105,7 +170,7 @@ default`,
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
-			wl.UnmarshalNamespace([]byte(c.marshalledNs))
+			wl.UnmarshalNamespace(c.marshalledNs)
 			assert.Equal(t, c.unmarshalledNs, wl.byNamespaces, "result")
 		})
 	}
@@ -136,7 +201,7 @@ func TestWhiteList_UnmarshalLegacy(t *testing.T) {
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
-			err := wl.UnmarshalLegacy([]byte(c.marshalledImage), []byte(c.marshalledNs))
+			err := wl.UnmarshalLegacy(c.marshalledImage, c.marshalledNs)
 			assert.Equal(t, c.fail, err != nil, "error occurs")
 			assert.Equal(t, c.unmarshalledImage, wl.byImages, "image")
 			assert.Equal(t, c.unmarshalledNs, wl.byNamespaces, "ns")
@@ -166,7 +231,7 @@ func TestWhiteList_UnmarshalLegacyImage(t *testing.T) {
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
-			err := wl.UnmarshalLegacyImage([]byte(c.marshalledImage))
+			err := wl.UnmarshalLegacyImage(c.marshalledImage)
 			assert.Equal(t, c.fail, err != nil, "error occurs")
 			assert.Equal(t, c.unmarshalledImage, wl.byImages, "result")
 		})
@@ -192,7 +257,7 @@ func TestWhiteList_UnmarshalLegacyNamespace(t *testing.T) {
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
-			err := wl.UnmarshalLegacyNamespace([]byte(c.marshalledNs))
+			err := wl.UnmarshalLegacyNamespace(c.marshalledNs)
 			assert.Equal(t, c.fail, err != nil, "error occurs")
 			assert.Equal(t, c.unmarshalledNs, wl.byNamespaces, "result")
 		})

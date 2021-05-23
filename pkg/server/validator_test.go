@@ -16,22 +16,24 @@ import (
 	"github.com/theupdateframework/notary/trustpinning"
 	"github.com/theupdateframework/notary/tuf"
 	notarydata "github.com/theupdateframework/notary/tuf/data"
+	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
 	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
 	"io/ioutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/deprecated/scheme"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	kscheme "k8s.io/client-go/kubernetes/scheme"
 	restfake "k8s.io/client-go/rest/fake"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path"
 	"regexp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -44,6 +46,7 @@ const (
 	testNsNoPolicy = "testNsNoPolicy"
 	testNsPolicy   = "testNsPolicy"
 
+	testTag                     = "test"
 	testImageNotSigned          = "image-not-signed"
 	testImageSignedMeetPolicy   = "image-signed-meet-policy"
 	testImageSignedUnmeetPolicy = "image-signed-unmeet-policy"
@@ -63,9 +66,9 @@ var (
 	testCrypto = cryptoservice.NewCryptoService(trustmanager.NewKeyMemoryStore(passphrase.ConstantRetriever("pass")))
 	testJsons  = map[string]map[string][]byte{}
 
-	regSignerPolicyPath = regexp.MustCompile("/apis/tmax.io/v1/namespaces/(.*)/signerpolicies")
+	regSignerPolicyPath = regexp.MustCompile("/apis/tmax.io/v1(/namespaces/(.*))?/signerpolicies")
 	regSignerKeyPath    = regexp.MustCompile("/apis/tmax.io/v1/signerkeys/(.*)")
-	registryPath        = regexp.MustCompile("/apis/tmax.io/v1/namespaces/(.*)/registries")
+	registryPath        = regexp.MustCompile("/apis/tmax.io/v1(/namespaces/(.*))?/registries")
 
 	testTargetKeyMeetPolicy string
 )
@@ -80,24 +83,6 @@ type handlerTestCase struct {
 	expectedErrMsg   string
 }
 
-func initTestWhitelistDir() error {
-	whiteListDir = path.Join(os.TempDir(), "wh-test-"+randomString(5))
-	defer func() {
-		_ = os.RemoveAll(whiteListDir)
-	}()
-
-	if err := os.MkdirAll(whiteListDir, 0755); err != nil {
-		return err
-	}
-	if err := ioutil.WriteFile(whitelistByImageFile(), []byte(testImageWhitelisted), 0644); err != nil {
-		return err
-	}
-	if err := ioutil.WriteFile(whitelistByNamespaceFile(), nil, 0644); err != nil {
-		return err
-	}
-	return nil
-}
-
 type testRoundTrip struct{}
 
 func (rt *testRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -106,7 +91,7 @@ func (rt *testRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) {
 	return t.RoundTrip(r)
 }
 
-func testSignImage(srvHost, srvURL, image string) error {
+func testSignImage(srvHost, srvURL, image, dummyDigest string) error {
 	// Init notary client and sign images
 	tempDir := fmt.Sprintf("%s/notary/%s", os.TempDir(), randomString(10))
 	rt := &testRoundTrip{}
@@ -134,8 +119,8 @@ func testSignImage(srvHost, srvURL, image string) error {
 	}
 
 	target := &client.Target{
-		Name:   "test",
-		Hashes: notarydata.Hashes{"sha256": []byte("asdasd")},
+		Name:   testTag,
+		Hashes: notarydata.Hashes{"sha256": []byte(dummyDigest)},
 		Length: 32,
 	}
 	if err := repo.AddTarget(target, notarydata.CanonicalTargetsRole); err != nil {
@@ -158,13 +143,27 @@ func testSignImage(srvHost, srvURL, image string) error {
 
 func TestHandler_IsValid(t *testing.T) {
 	// Set loggers
-	if os.Getenv("CI") == "true" {
+	if os.Getenv("CI") != "true" {
 		logrus.SetLevel(logrus.DebugLevel)
 		ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	}
 
+	// Notary mock up server
+	testSrv := httptest.NewTLSServer(testNotaryHandler())
+	u, err := url.Parse(testSrv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testCli := fake.NewSimpleClientset()
+	testRestCli := testValidatorRestClient(u.Host)
+
 	// Init whitelist
-	if err := initTestWhitelistDir(); err != nil {
+	if err := createTestWhiteListConfigMap(testCli); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := createTestSecret(testCli, testSrv.URL); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,32 +175,19 @@ func TestHandler_IsValid(t *testing.T) {
 	testTimestampKey.Type = pub.Algorithm()
 	testTimestampKey.Value.Public = pub.Public()
 
-	// Notary mock up server
-	testSrv := httptest.NewTLSServer(testNotaryHandler())
-	u, err := url.Parse(testSrv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Sign some images
-	if err := testSignImage(u.Host, testSrv.URL, testImageSignedUnmeetPolicy); err != nil {
+	testDummyDigest := randomString(30)
+	if err := testSignImage(u.Host, testSrv.URL, testImageSignedUnmeetPolicy, testDummyDigest); err != nil {
 		t.Fatal(err)
 	}
-	if err := testSignImage(u.Host, testSrv.URL, testImageSignedMeetPolicy); err != nil {
-		t.Fatal(err)
-	}
-
-	testCli := fake.NewSimpleClientset()
-	testRestCli := testRestClient(u.Host)
-
-	if err := createTestSecret(testCli, testSrv.URL); err != nil {
+	if err := testSignImage(u.Host, testSrv.URL, testImageSignedMeetPolicy, testDummyDigest); err != nil {
 		t.Fatal(err)
 	}
 
 	tc := map[string]handlerTestCase{
 		"whitelisted": {
 			namespace:        testNsNoPolicy,
-			image:            testImageWhitelisted,
+			image:            fmt.Sprintf("%s:%s", testImageWhitelisted, testTag),
 			pullSecret:       "",
 			expectedValid:    true,
 			expectedErrOccur: false,
@@ -209,7 +195,7 @@ func TestHandler_IsValid(t *testing.T) {
 		},
 		"noAuth": {
 			namespace:        testNsNoPolicy,
-			image:            testImageNotSigned,
+			image:            fmt.Sprintf("%s:%s", testImageNotSigned, testTag),
 			pullSecret:       "",
 			expectedValid:    false,
 			expectedErrOccur: true,
@@ -217,7 +203,7 @@ func TestHandler_IsValid(t *testing.T) {
 		},
 		"noPolicyNotSigned": {
 			namespace:        testNsNoPolicy,
-			image:            testImageNotSigned,
+			image:            fmt.Sprintf("%s:%s", testImageNotSigned, testTag),
 			pullSecret:       testSecretDcj,
 			expectedValid:    false,
 			expectedErrOccur: false,
@@ -225,7 +211,7 @@ func TestHandler_IsValid(t *testing.T) {
 		},
 		"noPolicySigned": {
 			namespace:        testNsNoPolicy,
-			image:            testImageSignedUnmeetPolicy,
+			image:            fmt.Sprintf("%s:%s", testImageSignedUnmeetPolicy, testTag),
 			pullSecret:       testSecretDcj,
 			expectedValid:    true,
 			expectedErrOccur: false,
@@ -233,7 +219,7 @@ func TestHandler_IsValid(t *testing.T) {
 		},
 		"signedNotMeetPolicy": {
 			namespace:        testNsPolicy,
-			image:            testImageSignedUnmeetPolicy,
+			image:            fmt.Sprintf("%s:%s", testImageSignedUnmeetPolicy, testTag),
 			pullSecret:       testSecretDcj,
 			expectedValid:    false,
 			expectedErrOccur: false,
@@ -241,23 +227,32 @@ func TestHandler_IsValid(t *testing.T) {
 		},
 		"signedMeetPolicy": {
 			namespace:        testNsPolicy,
-			image:            testImageSignedMeetPolicy,
+			image:            fmt.Sprintf("%s:%s", testImageSignedMeetPolicy, testTag),
 			pullSecret:       testSecretDcj,
 			expectedValid:    true,
 			expectedErrOccur: false,
 			expectedErrMsg:   "",
 		},
+		"unmatchedDigest": {
+			namespace:        testNsNoPolicy,
+			image:            fmt.Sprintf("%s:%s@sha256:48b206d34364518658edac279026be0dc0b87dddda042c9a41ef2e3ef34a2429", testImageSignedMeetPolicy, testTag),
+			pullSecret:       testSecretDcj,
+			expectedValid:    false,
+			expectedErrOccur: false,
+			expectedErrMsg:   "",
+		},
 	}
 
+	validator, err := newValidator(testCli, testRestCli, getFindHyperCloudNotaryServerFn(testRestCli))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
-			imgUri := fmt.Sprintf("%s/%s:test", u.Host, c.image)
-			handler, err := newValidator(testCli, testRestCli, getFindHyperCloudNotaryServerFn(testRestCli), generateTestPod(imgUri, c.namespace, c.pullSecret))
-			if err != nil {
-				t.Fatal(err)
-			}
+			imgUri := fmt.Sprintf("%s/%s", u.Host, c.image)
 
-			valid, image, err := handler.IsValid()
+			pod := generateTestPod(imgUri, c.namespace, c.pullSecret)
+			valid, image, err := validator.CheckIsValidAndAddDigest(pod)
 			assert.Equal(t, c.expectedErrOccur, err != nil, "error occurs")
 			if err != nil {
 				assert.Equal(t, c.expectedErrMsg, err.Error(), "error message")
@@ -265,10 +260,41 @@ func TestHandler_IsValid(t *testing.T) {
 				assert.Equal(t, c.expectedValid, valid, "validity")
 				if !valid {
 					assert.Equal(t, imgUri, image, "failed image")
+				} else {
+					// Whitelisted image does not get digest
+					if !strings.Contains(pod.Spec.Containers[0].Image, testImageWhitelisted) {
+						t.Log(pod.Spec.Containers[0].Image)
+						ref, _ := parseImage(imgUri)
+						ref.digest = fmt.Sprintf("%x", testDummyDigest)
+						assert.Equal(t, ref.String(), pod.Spec.Containers[0].Image, "image digest")
+					}
 				}
 			}
 		})
 	}
+}
+
+func createTestWhiteListConfigMap(cli kubernetes.Interface) error {
+	ns, err := k8s.Namespace()
+	if err != nil {
+		return err
+	}
+
+	secret := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      whitelistConfigMap,
+			Namespace: ns,
+		},
+		Data: map[string]string{
+			whitelistByImage:     testImageWhitelisted,
+			whitelistByNamespace: "",
+		},
+	}
+
+	if _, err := cli.CoreV1().ConfigMaps(ns).Create(context.Background(), secret, metav1.CreateOptions{}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func createTestSecret(cli kubernetes.Interface, registryHost string) error {
@@ -322,33 +348,78 @@ func generateTestPod(img, ns, secretName string) *corev1.Pod {
 	return pod
 }
 
-func testRestClient(regHost string) *restfake.RESTClient {
+func testValidatorRestClient(regHost string) *restfake.RESTClient {
+	_ = whv1.AddToScheme(scheme.Scheme)
 	return &restfake.RESTClient{
-		NegotiatedSerializer: kscheme.Codecs,
+		GroupVersion:         whv1.GroupVersion,
+		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
 		Client: restfake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
+			isWatch := len(req.URL.Query()["watch"]) > 0
 			// SignerPolicies
-			if sp := regSignerPolicyPath.FindAllStringSubmatch(req.URL.Path, -1); len(sp) == 1 && len(sp[0]) == 2 {
-				ns := sp[0][1]
-				list := &whv1.SignerPolicyList{}
+			if sp := regSignerPolicyPath.FindAllStringSubmatch(req.URL.Path, -1); len(sp) == 1 {
+				allPolicies := map[string][]whv1.SignerPolicy{}
 
-				// Yes policy
-				if ns == testNsPolicy {
-					list.Items = append(list.Items, whv1.SignerPolicy{
-						Spec: whv1.SignerPolicySpec{
-							Signers: []string{testSigner},
-						},
-					})
+				// Yes Policy
+				allPolicies[testNsPolicy] = append(allPolicies[testNsPolicy], whv1.SignerPolicy{
+					TypeMeta: metav1.TypeMeta{APIVersion: "tmax.io/v1", Kind: "SignerPolicy"},
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: testNsPolicy,
+					},
+					Spec: whv1.SignerPolicySpec{
+						Signers: []string{testSigner},
+					},
+				})
+
+				ns := sp[0][2]
+
+				list := &whv1.SignerPolicyList{}
+				// All namespace
+				if sp[0][2] == "" {
+					for _, v := range allPolicies {
+						list.Items = append(list.Items, v...)
+					}
+				} else {
+					list.Items = append(list.Items, allPolicies[ns]...)
+				}
+
+				if isWatch {
+					b := bytes.NewBuffer([]byte{})
+
+					for _, policies := range allPolicies {
+						for _, p := range policies {
+							pBytes, err := json.Marshal(p)
+							if err != nil {
+								return nil, err
+							}
+							ev := metav1.WatchEvent{
+								Type:   string(watch.Added),
+								Object: runtime.RawExtension{Raw: json.RawMessage(pBytes)},
+							}
+							bb, err := json.Marshal(ev)
+							if err != nil {
+								return nil, err
+							}
+							b.Write(bb)
+						}
+					}
+
+					header := http.Header{}
+					header.Set("Content-Type", "application/json")
+					header.Set("Transfer-Encoding", "chunked")
+
+					return &http.Response{StatusCode: http.StatusOK, Header: header, Body: ioutil.NopCloser(b)}, nil
 				}
 
 				b, err := json.Marshal(list)
 				if err != nil {
 					return nil, err
 				}
+
 				return &http.Response{StatusCode: http.StatusOK, Body: ioutil.NopCloser(bytes.NewReader(b))}, nil
 			}
 
 			// SignerKeys
-			if sk := regSignerKeyPath.FindAllStringSubmatch(req.URL.Path, -1); len(sk) == 1 && len(sk[0]) == 2 {
+			if sk := regSignerKeyPath.FindAllStringSubmatch(req.URL.Path, -1); len(sk) == 1 {
 				b, err := json.Marshal(&regv1.SignerKey{
 					Spec: regv1.SignerKeySpec{
 						Targets: map[string]regv1.TrustKey{
@@ -363,8 +434,8 @@ func testRestClient(regHost string) *restfake.RESTClient {
 			}
 
 			// Registries
-			if rs := registryPath.FindAllStringSubmatch(req.URL.Path, -1); len(rs) == 1 && len(rs[0]) == 2 {
-				ns := rs[0][1]
+			if rs := registryPath.FindAllStringSubmatch(req.URL.Path, -1); len(rs) == 1 {
+				ns := rs[0][2]
 				list := &regv1.RegistryList{
 					Items: []regv1.Registry{{
 						ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "test-reg"},
@@ -381,17 +452,6 @@ func testRestClient(regHost string) *restfake.RESTClient {
 					return nil, err
 				}
 				return &http.Response{StatusCode: http.StatusOK, Body: ioutil.NopCloser(bytes.NewReader(b))}, nil
-			}
-
-			if req.Body != nil {
-				defer func() {
-					_ = req.Body.Close()
-				}()
-				b, err := ioutil.ReadAll(req.Body)
-				if err != nil {
-					return nil, err
-				}
-				fmt.Println(string(b))
 			}
 			return &http.Response{StatusCode: http.StatusNotFound, Body: ioutil.NopCloser(&bytes.Buffer{})}, nil
 		}),
@@ -528,71 +588,4 @@ func testNotaryHandler() http.Handler {
 		testJsons[gun]["timestamp"] = tsBytes
 	})
 	return m
-}
-
-type imageWhiteListTestCase struct {
-	list  []imageRef
-	image string
-
-	expectedWhitelisted bool
-}
-
-func TestHandler_IsImageInWhiteList(t *testing.T) {
-	tc := map[string]imageWhiteListTestCase{
-		"noTagWhiteListed": {
-			list:                []imageRef{{name: "notary"}},
-			image:               "registry-test.registry.ipip.nip.io/notary",
-			expectedWhitelisted: true,
-		},
-		"noTagNotWhiteListed": {
-			list:                []imageRef{{name: "notary"}},
-			image:               "registry-test.registry.ipip.nip.io/notary-2",
-			expectedWhitelisted: false,
-		},
-		"yesTagNotWhiteListed": {
-			list:                []imageRef{{name: "notary", tag: "test"}},
-			image:               "registry-test.registry.ipip.nip.io/notary",
-			expectedWhitelisted: false,
-		},
-		"yesTagWhiteListed": {
-			list:                []imageRef{{name: "notary", tag: "test"}},
-			image:               "registry-test.registry.ipip.nip.io/notary:test",
-			expectedWhitelisted: true,
-		},
-		"registry": {
-			list:                []imageRef{{name: "registry"}},
-			image:               "registry-test.registry.ipip.nip.io/test-image",
-			expectedWhitelisted: false,
-		},
-		"wildcard": {
-			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "*"}},
-			image:               "registry-2.registry.ipip.nip.io/test-image",
-			expectedWhitelisted: true,
-		},
-		"wildcard2": {
-			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "*"}},
-			image:               "registry-2.registry.ipip.nip.io/test-image:test",
-			expectedWhitelisted: true,
-		},
-		"containsSlashSuccess": {
-			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "tmaxcloudck/notary_mysql", tag: "0.6.2-rc2"}},
-			image:               "registry-2.registry.ipip.nip.io/tmaxcloudck/notary_mysql:0.6.2-rc2",
-			expectedWhitelisted: true,
-		},
-		"containsSlashFailure": {
-			list:                []imageRef{{host: "registry-2.registry.ipip.nip.io", name: "tmaxcloudck/notary_mysql", tag: "0.6.2-rc2"}},
-			image:               "registry-2.registry.ipip.nip.io/tmaxcloudck/notary_mysql:0.6.2-rc1",
-			expectedWhitelisted: false,
-		},
-	}
-
-	for name, c := range tc {
-		t.Run(name, func(t *testing.T) {
-			h := &validator{
-				whiteList: WhiteList{byImages: c.list},
-			}
-			isWhitelisted := h.isImageInWhiteList(c.image)
-			assert.Equal(t, c.expectedWhitelisted, isWhitelisted)
-		})
-	}
 }
