@@ -45,3 +45,4 @@ data:
     cicd-system
     tfapplyclaim
     hyperauth
+    gitlab-system
