@@ -10,6 +10,7 @@ func init() {
 
 // SignerPolicySpec is a spec of SignerPolicy
 type SignerPolicySpec struct {
+	// Signers are the list of desired signers of images to be allowed in the namespace
 	Signers []string `json:"signers"`
 }
 

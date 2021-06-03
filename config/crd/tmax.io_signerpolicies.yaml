@@ -39,6 +39,8 @@ spec:
             description: SignerPolicySpec is a spec of SignerPolicy
             properties:
               signers:
+                description: Signers are the list of desired signers of images to
+                  be allowed in the namespace
                 items:
                   type: string
                 type: array
