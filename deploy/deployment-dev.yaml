@@ -23,9 +23,6 @@ spec:
                     - name: webhook-certs
                       mountPath: /etc/webhook/certs
                       readOnly: true
-                    - name: whitelist
-                      mountPath: /etc/webhook/config
-                      readOnly: true
             volumes:
                 - name: webhook-certs
                   secret:
