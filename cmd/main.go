@@ -1,11 +1,15 @@
 package main
 
 import (
+	"k8s.io/client-go/kubernetes"
 	"log"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/tmax-cloud/image-validating-webhook/pkg/server"
+
+	_ "github.com/tmax-cloud/image-validating-webhook/pkg/admissions"
 )
 
 func main() {
@@ -16,12 +20,17 @@ func main() {
 	key := "/etc/webhook/certs/key.pem"
 	listenOn := "0.0.0.0:8443"
 
-	admissionController, err := server.NewImageValidationAdmissionHandler()
+	// Create config, clients
+	cfg, err := config.GetConfig()
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-	webhookServer := server.GetAdmissionValidationServer(admissionController, cert, key, listenOn)
-	if err := webhookServer.ListenAndServeTLS("", ""); err != nil {
-		log.Fatal(err)
+
+	clientSet, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		panic(err)
 	}
+
+	webhookServer := server.New(cert, key, listenOn, cfg, clientSet, clientSet.RESTClient())
+	webhookServer.Start()
 }

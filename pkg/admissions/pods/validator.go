@@ -1,31 +1,36 @@
-package server
+package pods
 
 import (
 	"context"
 	"fmt"
 	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
-	"k8s.io/client-go/kubernetes/scheme"
-	restclient "k8s.io/client-go/rest"
-	"log"
-	"math/rand"
-	"time"
-
+	"github.com/tmax-cloud/image-validating-webhook/pkg/notary"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"log"
 )
 
 func init() {
 	if err := whv1.AddToScheme(scheme.Scheme); err != nil {
 		log.Fatal(err)
 	}
+	if err := corev1.AddToScheme(scheme.Scheme); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// Validator validates pods if the images are signed
+type Validator interface {
+	CheckIsValidAndAddDigest(pod *corev1.Pod) (bool, string, error)
 }
 
 // validator handles overall process to check signs
 type validator struct {
-	client     kubernetes.Interface
-	restClient restclient.Interface
+	client kubernetes.Interface
 
 	findNotaryServer findNotaryServerFn
 
@@ -35,39 +40,27 @@ type validator struct {
 
 type findNotaryServerFn func(registryHost string) string
 
-func newValidator(clientset kubernetes.Interface, restClient restclient.Interface, findNotaryFn findNotaryServerFn) (*validator, error) {
+func newValidator(cfg *rest.Config, clientSet kubernetes.Interface, restClient rest.Interface, findNotaryFn findNotaryServerFn) (*validator, error) {
 	v := &validator{
-		client:           clientset,
-		restClient:       restClient,
+		client:           clientSet,
 		findNotaryServer: findNotaryFn,
 	}
 
 	var err error
 
 	// Initiate SignerPolicy cache
-	v.signerPolicyCache, err = newSignerPolicyCache(restClient)
+	v.signerPolicyCache, err = newSignerPolicyCache(cfg, restClient)
 	if err != nil {
 		return nil, err
 	}
 
 	// Initiate WhiteList cache
-	v.whiteList, err = newWhiteList(clientset)
+	v.whiteList, err = newWhiteList(cfg, clientSet)
 	if err != nil {
 		return nil, err
 	}
 
 	return v, nil
-}
-
-func getDigest(tag string, signature Signature) string {
-	digest := ""
-	for _, signedTag := range signature.SignedTags {
-		if signedTag.SignedTag == tag {
-			digest = signedTag.Digest
-		}
-	}
-
-	return digest
 }
 
 // CheckIsValidAndAddDigest checks if images of initContainers and containers are valid
@@ -78,16 +71,16 @@ func (h *validator) CheckIsValidAndAddDigest(pod *corev1.Pod) (bool, string, err
 	}
 
 	// Check initContainers
-	if isValid, name, err := h.addDigestWhenImageValid(pod.Spec.InitContainers, pod.Namespace, pod.Spec.ImagePullSecrets); err != nil {
+	if isValid, reason, err := h.addDigestWhenImageValid(pod.Spec.InitContainers, pod.Namespace, pod.Spec.ImagePullSecrets); err != nil {
 		return false, "", err
 	} else if !isValid {
-		return false, name, nil
+		return false, reason, nil
 	}
 	// Check containers
-	if isValid, name, err := h.addDigestWhenImageValid(pod.Spec.Containers, pod.Namespace, pod.Spec.ImagePullSecrets); err != nil {
+	if isValid, reason, err := h.addDigestWhenImageValid(pod.Spec.Containers, pod.Namespace, pod.Spec.ImagePullSecrets); err != nil {
 		return false, "", err
 	} else if !isValid {
-		return false, name, nil
+		return false, reason, nil
 	}
 
 	return true, "", nil
@@ -112,23 +105,23 @@ func (h *validator) addDigestWhenImageValid(containers []corev1.Container, names
 		}
 
 		// Get trust info of the image
-		sig, err := fetchSignature(container.Image, basicAuth, h.findNotaryServer(ref.host))
+		sig, err := notary.FetchSignature(container.Image, basicAuth, h.findNotaryServer(ref.host))
 		if err != nil {
 			log.Println(err)
 			return false, "", err
 		}
 		// sig is nil if it's not signed
 		if sig == nil {
-			return false, container.Image, nil
+			return false, fmt.Sprintf("Image '%s' is not signed", container.Image), nil
 		}
 
 		// Check if it meets signer policy
-		if h.hasMatchedSigner(*sig, namespace) {
-			digest := getDigest(ref.tag, *sig)
+		if h.signerPolicyCache.doesMatchPolicy(sig.GetRepoAdminKey(), namespace) {
+			digest := sig.GetDigest(ref.tag)
 
 			// If digest is different from user-specified one, return error
 			if ref.digest != "" && ref.digest != digest {
-				return false, container.Image, nil
+				return false, fmt.Sprintf("Image '%s''s digest is different from the signed digest", container.Image), nil
 			}
 
 			ref.digest = digest
@@ -137,14 +130,10 @@ func (h *validator) addDigestWhenImageValid(containers []corev1.Container, names
 		}
 
 		// Does NOT match signer policy
-		return false, container.Image, nil
+		return false, fmt.Sprintf("Image '%s' does not meet signer policy. Please check the namespace's SignerPolicy", container.Image), nil
 	}
 
 	return true, "", nil
-}
-
-func (h *validator) hasMatchedSigner(signature Signature, namespace string) bool {
-	return h.signerPolicyCache.doesMatchPolicy(signature.getRepoAdminKey(), namespace)
 }
 
 func (h *validator) getBasicAuthForRegistry(host, namespace string, pullSecrets []corev1.LocalObjectReference) (string, error) {
@@ -177,17 +166,4 @@ func (h *validator) findRegistryServer(registry string) string {
 		return "https://registry-1.docker.io"
 	}
 	return "https://" + registry
-}
-
-func randomString(length int) string {
-	rand.Seed(time.Now().UnixNano())
-	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	charset := "abcdefghijklmnopqrstuvwxyz1234567890"
-	str := make([]byte, length)
-
-	for i := range str {
-		str[i] = charset[seededRand.Intn(len(charset))]
-	}
-
-	return string(str)
 }

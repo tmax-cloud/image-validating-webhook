@@ -1,36 +1,41 @@
 package k8s
 
 import (
-	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
-// NewClientSet initiates a new rest client set
-func NewClientSet() (*kubernetes.Clientset, rest.Interface, error) {
-	// Common client set
-	comCfg, err := config.GetConfig()
-	if err != nil {
-		return nil, nil, err
-	}
-	cliSet, err := kubernetes.NewForConfig(comCfg)
-	if err != nil {
-		return nil, nil, err
-	}
+// GroupVersionClient a group/version-specific k8s client
+type GroupVersionClient interface {
+	rest.Interface
 
-	// Rest client for tmax.io/v1
-	restCfg, err := config.GetConfig()
-	if err != nil {
-		return nil, nil, err
+	GetGroupVersion() schema.GroupVersion
+}
+
+type groupVersionClient struct {
+	*rest.RESTClient
+	gv schema.GroupVersion
+}
+
+// NewGroupVersionClient creates a new GroupVersionClient, given groupVersion and config
+func NewGroupVersionClient(cfg *rest.Config, groupVersion schema.GroupVersion) (GroupVersionClient, error) {
+	restCfg := rest.CopyConfig(cfg)
+	if groupVersion.Group == "" {
+		restCfg.APIPath = "/api"
+	} else {
+		restCfg.APIPath = "/apis"
 	}
-	restCfg.ContentConfig.GroupVersion = &whv1.GroupVersion
+	restCfg.ContentConfig.GroupVersion = &groupVersion
 	restCfg.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
+
 	restCli, err := rest.RESTClientFor(restCfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	return &groupVersionClient{RESTClient: restCli, gv: groupVersion}, nil
+}
 
-	return cliSet, restCli, nil
+func (g *groupVersionClient) GetGroupVersion() schema.GroupVersion {
+	return g.gv
 }
