@@ -1,92 +1,90 @@
 package server
 
 import (
-	"crypto/tls"
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"k8s.io/client-go/kubernetes/scheme"
-	"log"
+	"github.com/gorilla/mux"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"net/http"
-
-	"k8s.io/api/admission/v1beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// AdmissionController is ...
-type AdmissionController interface {
-	HandleAdmission(review *v1beta1.AdmissionReview) error
+// HandlerConfig is a config to be passed to the handler init functions
+type HandlerConfig struct {
+	RestCfg    *rest.Config
+	ClientSet  kubernetes.Interface
+	RestClient rest.Interface
 }
 
-// AdmissionControllerServer is ...
-type AdmissionControllerServer struct {
-	AdmissionController AdmissionController
-	Decoder             runtime.Decoder
+// HandlerInitFunc is a function for initializing the Handler
+type HandlerInitFunc func(cfg *HandlerConfig) (http.Handler, error)
+
+type handlerContainer struct {
+	path     string
+	methods  []string
+	initFunc HandlerInitFunc
 }
 
-func (admissionControllerServer *AdmissionControllerServer) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	body, err := ioutil.ReadAll(request.Body)
+// handlerInitiators is a list of HandlerInitFunc, which will be called when the Server starts
+var handlerInitiators []handlerContainer
 
-	log.Println("Handling request")
-
-	if err != nil {
-		errMsg := fmt.Sprintf("Couldn't read request by %s", err)
-		log.Println(errMsg)
-		http.Error(writer, errMsg, http.StatusBadRequest)
-		return
-	}
-
-	review := &v1beta1.AdmissionReview{}
-	if _, _, err = admissionControllerServer.Decoder.Decode(body, nil, review); err != nil {
-		errMsg := fmt.Sprintf("Couldn't decode request by %s", err)
-		log.Println(errMsg)
-		review.Response = &v1beta1.AdmissionResponse{
-			Allowed: false,
-			Result: &v1.Status{
-				Message: errMsg,
-			},
-		}
-	}
-
-	_ = admissionControllerServer.AdmissionController.HandleAdmission(review)
-	responseInBytes, err := json.Marshal(review)
-	if err != nil {
-		errMsg := fmt.Sprintf("Couldn't encode response by %s", err)
-		log.Println(errMsg)
-		http.Error(writer, errMsg, http.StatusInternalServerError)
-		return
-	}
-
-	if _, err := writer.Write(responseInBytes); err != nil {
-		errMsg := fmt.Sprintf("Couldn't write response by %s", err)
-		log.Println(errMsg)
-		http.Error(writer, errMsg, http.StatusInternalServerError)
-		return
-	}
-}
-
-// GetAdmissionValidationServer is ...
-func GetAdmissionValidationServer(admissionController AdmissionController, tlsCert, tlsKey, listenOn string) *http.Server {
-	serverCert, err := tls.LoadX509KeyPair(tlsCert, tlsKey)
-	mux := http.NewServeMux()
-	mux.Handle("/validate", &AdmissionControllerServer{
-		AdmissionController: admissionController,
-		Decoder:             scheme.Codecs.UniversalDeserializer(),
+// AddHandlerInitiator appends an initiator func to the list
+func AddHandlerInitiator(path string, methods []string, handlerInit HandlerInitFunc) {
+	handlerInitiators = append(handlerInitiators, handlerContainer{
+		path:     path,
+		methods:  methods,
+		initFunc: handlerInit,
 	})
+}
 
-	server := &http.Server{
-		Handler: mux,
-		Addr:    listenOn,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{serverCert},
-		},
+// Server is a multi-purpose http server
+type Server struct {
+	server *http.Server
+
+	certFile string
+	keyFile  string
+
+	mux *mux.Router
+
+	cfg        *rest.Config
+	clientSet  kubernetes.Interface
+	restClient rest.Interface
+}
+
+// New initiates a new Server instance
+func New(certFile, keyFile, addr string, cfg *rest.Config, clientSet kubernetes.Interface, restClient rest.Interface) *Server {
+	srv := &Server{
+		server:   &http.Server{Addr: addr},
+		certFile: certFile,
+		keyFile:  keyFile,
+		mux:      mux.NewRouter(),
+
+		cfg:        cfg,
+		clientSet:  clientSet,
+		restClient: restClient,
 	}
 
-	if err != nil {
-		log.Printf("params: %s %s %s", tlsCert, tlsKey, listenOn)
-		log.Panic(err)
-	}
+	return srv
+}
 
-	return server
+// Start adds all the handlers to the server and starts the server
+func (s *Server) Start() {
+	if err := s.addHandlersToServer(); err != nil {
+		panic(err)
+	}
+	if err := s.server.ListenAndServeTLS(s.certFile, s.keyFile); err != nil {
+		panic(err)
+	}
+}
+
+func (s *Server) addHandlersToServer() error {
+	// Add handlers to the mux
+	cfg := &HandlerConfig{RestCfg: s.cfg, ClientSet: s.clientSet, RestClient: s.restClient}
+	for _, i := range handlerInitiators {
+		h, err := i.initFunc(cfg)
+		if err != nil {
+			return err
+		}
+		s.mux.Methods(i.methods...).Path(i.path).Handler(h)
+	}
+	s.server.Handler = s.mux
+	return nil
 }

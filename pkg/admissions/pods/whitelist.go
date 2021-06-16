@@ -1,4 +1,4 @@
-package server
+package pods
 
 import (
 	"bytes"
@@ -6,10 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
+	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"log"
 	"regexp"
 	"strings"
@@ -37,90 +41,69 @@ type WhiteList struct {
 	byImages     []imageRef
 	byNamespaces []string
 
-	client kubernetes.Interface
-
 	lock sync.Mutex
+
+	clientSet    kubernetes.Interface
+	cachedClient watcher.CachedClient
 }
 
-func newWhiteList(client kubernetes.Interface) (*WhiteList, error) {
+func newWhiteList(cfg *rest.Config, clientSet kubernetes.Interface) (*WhiteList, error) {
 	wl := &WhiteList{
-		client: client,
+		clientSet: clientSet,
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	// Create watcher client for corev1
+	watchCli, err := k8s.NewGroupVersionClient(cfg, corev1.SchemeGroupVersion)
+	if err != nil {
+		panic(err)
+	}
+
+	// Initiate watcher
+	w := watcher.New(registryNamespace, string(corev1.ResourceConfigMaps), &corev1.ConfigMap{}, watchCli, fields.ParseSelectorOrDie(fmt.Sprintf("metadata.name=%s", whitelistConfigMap)))
+	wl.cachedClient = watcher.NewCachedClient(w)
+
+	w.SetHandler(wl)
+
+	waitCh := make(chan struct{})
 
 	// Start to watch white list config map
-	go wl.watch(&wg)
+	go w.Start(waitCh)
 
 	// Block until it's ready
-	wg.Wait()
+	<-waitCh
 
 	return wl, nil
 }
 
-func (w *WhiteList) watch(initWait *sync.WaitGroup) {
-	ns, err := k8s.Namespace()
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Get first
-	cm, err := w.client.CoreV1().ConfigMaps(ns).Get(context.Background(), whitelistConfigMap, metav1.GetOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err := w.ParseOrUpdateWhiteList(cm.Data, w.client); err != nil {
-		log.Fatal(err)
+// Handle handles a whitelist configmap update event
+func (w *WhiteList) Handle(object runtime.Object) error {
+	cm, ok := object.(*corev1.ConfigMap)
+	if !ok {
+		return fmt.Errorf("object is not a ConfigMap")
 	}
 
-	initWait.Done()
-
-	lastResourceVersion := cm.ResourceVersion
-	for {
-		// Watch
-		watcher, err := w.client.CoreV1().ConfigMaps(ns).Watch(context.Background(), metav1.ListOptions{FieldSelector: fmt.Sprintf("metadata.name=%s", whitelistConfigMap)})
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		for e := range watcher.ResultChan() {
-			cm, ok := e.Object.(*corev1.ConfigMap)
-			if !ok || cm.Name != whitelistConfigMap {
-				continue
-			}
-
-			// Check resourceVersion - remove redundant processing
-			if lastResourceVersion == cm.ResourceVersion {
-				continue
-			}
-
-			log.Println("Whitelist is updated")
-
-			if err := w.ParseOrUpdateWhiteList(cm.Data, w.client); err != nil {
-				log.Println(err)
-				continue
-			}
-
-			lastResourceVersion = cm.ResourceVersion
-		}
+	if err := w.ParseOrUpdateWhiteList(cm); err != nil {
+		return err
 	}
+	return nil
 }
 
 // ParseOrUpdateWhiteList reads whitelist from the config map data and updates it if it's still legacy
-func (w *WhiteList) ParseOrUpdateWhiteList(data map[string]string, clientSet kubernetes.Interface) error {
+func (w *WhiteList) ParseOrUpdateWhiteList(cm *corev1.ConfigMap) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	log.Println("Whitelist is updated. Parsing...")
+
 	// Read Image whitelist
-	imageWhiteList, iwExist := data[whitelistByImage]
+	imageWhiteList, iwExist := cm.Data[whitelistByImage]
 	if iwExist {
 		if err := w.UnmarshalImage(imageWhiteList); err != nil {
 			return err
 		}
 	} else {
 		// Fallback to legacy
-		imageWhiteListLegacy, exist := data[whitelistByImageLegacy]
+		imageWhiteListLegacy, exist := cm.Data[whitelistByImageLegacy]
 		if !exist {
 			return fmt.Errorf("there are neither %s nor %s in whitelist", whitelistByImage, whitelistByImageLegacy)
 		}
@@ -130,22 +113,22 @@ func (w *WhiteList) ParseOrUpdateWhiteList(data map[string]string, clientSet kub
 
 		// Update ConfigMap!
 		converted, _ := w.Marshal()
-		b, err := json.Marshal(&corev1.ConfigMap{Data: map[string]string{whitelistByImage: string(converted)}})
+		b, err := json.Marshal(&corev1.ConfigMap{Data: map[string]string{whitelistByImage: converted}})
 		if err != nil {
 			return err
 		}
-		if _, err := clientSet.CoreV1().ConfigMaps(registryNamespace).Patch(context.Background(), whitelistConfigMap, types.StrategicMergePatchType, b, metav1.PatchOptions{}); err != nil {
+		if _, err := w.clientSet.CoreV1().ConfigMaps(registryNamespace).Patch(context.Background(), whitelistConfigMap, types.StrategicMergePatchType, b, metav1.PatchOptions{}); err != nil {
 			return err
 		}
 	}
 
 	// Read Namespace whitelist
-	nsWhiteList, nwExist := data[whitelistByNamespace]
+	nsWhiteList, nwExist := cm.Data[whitelistByNamespace]
 	if nwExist {
 		w.UnmarshalNamespace(nsWhiteList)
 	} else {
 		// Fallback to legacy
-		nsWhiteListLegacy, exist := data[whitelistByNamespaceLegacy]
+		nsWhiteListLegacy, exist := cm.Data[whitelistByNamespaceLegacy]
 		if !exist {
 			return fmt.Errorf("there are neither %s nor %s in whitelist", whitelistByNamespace, whitelistByNamespaceLegacy)
 		}
@@ -155,11 +138,11 @@ func (w *WhiteList) ParseOrUpdateWhiteList(data map[string]string, clientSet kub
 
 		// Update ConfigMap!
 		_, converted := w.Marshal()
-		b, err := json.Marshal(&corev1.ConfigMap{Data: map[string]string{whitelistByNamespace: string(converted)}})
+		b, err := json.Marshal(&corev1.ConfigMap{Data: map[string]string{whitelistByNamespace: converted}})
 		if err != nil {
 			return err
 		}
-		if _, err := clientSet.CoreV1().ConfigMaps(registryNamespace).Patch(context.Background(), whitelistConfigMap, types.StrategicMergePatchType, b, metav1.PatchOptions{}); err != nil {
+		if _, err := w.clientSet.CoreV1().ConfigMaps(registryNamespace).Patch(context.Background(), whitelistConfigMap, types.StrategicMergePatchType, b, metav1.PatchOptions{}); err != nil {
 			return err
 		}
 	}

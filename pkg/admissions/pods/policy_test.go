@@ -1,12 +1,15 @@
-package server
+package pods
 
 import (
 	"bytes"
 	"encoding/json"
 	"github.com/bmizerany/assert"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
+	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher/fake"
 	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
 	"io/ioutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	restfake "k8s.io/client-go/rest/fake"
 	"net/http"
@@ -39,15 +42,19 @@ func TestSignerPolicyCache_doesMatchPolicy(t *testing.T) {
 		},
 	}
 
-	cache := SignerPolicyCache{policies: map[string]map[string]*whv1.SignerPolicy{}, restClient: testPolicyRestClient()}
-
-	cache.policies[testNsPolicy] = map[string]*whv1.SignerPolicy{
-		"policy1": {
-			Spec: whv1.SignerPolicySpec{
-				Signers: []string{"signer1"},
+	cache := SignerPolicyCache{restClient: testPolicyRestClient(), cachedClient: &fake.CachedClient{
+		Cache: map[string]runtime.Object{
+			testNsPolicy + "/policy1": &whv1.SignerPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "policy1",
+					Namespace: testNsPolicy,
+				},
+				Spec: whv1.SignerPolicySpec{
+					Signers: []string{"signer1"},
+				},
 			},
 		},
-	}
+	}}
 
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {

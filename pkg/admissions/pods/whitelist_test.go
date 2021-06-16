@@ -1,4 +1,4 @@
-package server
+package pods
 
 import (
 	"github.com/bmizerany/assert"

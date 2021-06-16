@@ -1,7 +1,8 @@
-package server
+package notary
 
 import (
 	"fmt"
+	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
 	"github.com/tmax-cloud/registry-operator/pkg/image"
 	"github.com/tmax-cloud/registry-operator/pkg/trust"
 	"log"
@@ -39,7 +40,8 @@ type Key struct {
 	ID string `json:"ID"`
 }
 
-func (s *Signature) getRepoAdminKey() string {
+// GetRepoAdminKey gets admin key for the repository
+func (s *Signature) GetRepoAdminKey() string {
 	for _, key := range s.AdministrativeKeys {
 		if key.Name == "Repository" {
 			return key.Keys[0].ID
@@ -49,7 +51,19 @@ func (s *Signature) getRepoAdminKey() string {
 	return ""
 }
 
-func fetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error) {
+// GetDigest gets signed digest for the tag
+func (s *Signature) GetDigest(tag string) string {
+	digest := ""
+	for _, signedTag := range s.SignedTags {
+		if signedTag.SignedTag == tag {
+			digest = signedTag.Digest
+		}
+	}
+	return digest
+}
+
+// FetchSignature fetches a signature from the notary server
+func FetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error) {
 	img, err := image.NewImage(imageUri, "", basicAuth, nil)
 	if err != nil {
 		log.Println(err)
@@ -57,7 +71,10 @@ func fetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error
 	}
 
 	// Use notary client
-	tempDir := fmt.Sprintf("%s/notary/%s", os.TempDir(), randomString(10))
+	// Here, we create a new cache directory per requests.
+	// (Be aware that FetchSigner is called from inside the http.Handler. It can be called simultaneously as goroutines)
+	// By doing so, we can clean the cache directory after the process in easier way.
+	tempDir := fmt.Sprintf("%s/notary/%s", os.TempDir(), utils.RandomString(10))
 	not, err := trust.NewReadOnly(img, notaryServer, tempDir)
 	if err != nil {
 		log.Println(err)
