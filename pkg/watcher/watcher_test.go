@@ -2,7 +2,7 @@ package watcher
 
 import (
 	"bytes"
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/require"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	"io/ioutil"
 	corev1 "k8s.io/api/core/v1"
@@ -13,7 +13,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	restfake "k8s.io/client-go/rest/fake"
 	"net/http"
-	"reflect"
 	"testing"
 )
 
@@ -22,27 +21,27 @@ func TestNew(t *testing.T) {
 	wi := New("", "", &corev1.Pod{}, cli, fields.Everything())
 
 	w, ok := wi.(*watcher)
-	assert.Equal(t, true, ok, "assertion")
+	require.True(t, ok, "assertion")
 
 	// Queue test
 	t.Run("queue", func(t *testing.T) {
-		assert.Equal(t, true, w.queue != nil, "queue")
+		require.NotNil(t, w.queue, "queue")
 
-		assert.Equal(t, 0, w.queue.Len(), "len")
+		require.Equal(t, 0, w.queue.Len())
 		w.queue.Add(&corev1.Pod{Spec: corev1.PodSpec{SchedulerName: "test"}})
-		assert.Equal(t, 1, w.queue.Len(), "len")
+		require.Equal(t, 1, w.queue.Len())
 		obj, quit := w.queue.Get()
-		assert.Equal(t, false, quit, "quit")
+		require.False(t, quit)
 		pod, ok := obj.(*corev1.Pod)
-		assert.Equal(t, true, ok, "assertion")
-		assert.Equal(t, "test", pod.Spec.SchedulerName, "testVal")
+		require.True(t, ok, "assertion")
+		require.Equal(t, "test", pod.Spec.SchedulerName, "testVal")
 		w.queue.Done(obj)
-		assert.Equal(t, 0, w.queue.Len(), "len")
+		require.Equal(t, 0, w.queue.Len())
 	})
 
 	// Indexer test
 	t.Run("indexer", func(t *testing.T) {
-		assert.Equal(t, true, w.indexer != nil, "indexer")
+		require.NotNil(t, w.indexer, "indexer")
 
 		pods := []*corev1.Pod{
 			{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"}, Spec: corev1.PodSpec{SchedulerName: "test-1"}},
@@ -51,9 +50,7 @@ func TestNew(t *testing.T) {
 			{ObjectMeta: metav1.ObjectMeta{Name: "test2", Namespace: "kube-system"}, Spec: corev1.PodSpec{SchedulerName: "system-2"}},
 		}
 		for _, pod := range pods {
-			if err := w.indexer.Add(pod); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, w.indexer.Add(pod))
 		}
 
 		t.Run("namespaceIndex", func(t *testing.T) {
@@ -90,12 +87,12 @@ func TestNew(t *testing.T) {
 			for name, c := range tc {
 				t.Run(name, func(t *testing.T) {
 					objs, err := w.indexer.ByIndex(c.key, c.val)
-					if err != nil {
-						assert.Equal(t, c.errorOccurs, true, "error occurs")
-						assert.Equal(t, c.errorMessage, "", "error message")
+					if c.errorOccurs {
+						require.Error(t, err, "error occurs")
+						require.Equal(t, c.errorMessage, "", "error message")
 					} else {
-						assert.Equal(t, c.errorOccurs, false, "error occurs")
-						assert.Equal(t, c.expectedLen, len(objs), "len")
+						require.NoError(t, err, "error occurs")
+						require.Len(t, objs, c.expectedLen)
 					}
 				})
 			}
@@ -104,8 +101,8 @@ func TestNew(t *testing.T) {
 
 	// Informer test
 	t.Run("informer", func(t *testing.T) {
-		assert.Equal(t, true, w.informer != nil, "informer")
-		assert.Equal(t, false, w.informer.HasSynced(), "synced")
+		require.NotNil(t, w.informer, "informer")
+		require.False(t, w.informer.HasSynced(), "synced")
 	})
 }
 
@@ -125,16 +122,14 @@ func TestWatcher_SetHandler(t *testing.T) {
 	hdl := &testWatcherHandler{}
 
 	w, ok := wi.(*watcher)
-	assert.Equal(t, true, ok, "assertion")
+	require.True(t, ok, "assertion")
 
 	wi.SetHandler(hdl)
-	assert.Equal(t, true, w.handler != nil, "handler")
+	require.NotNil(t, w.handler, "handler")
 
 	pod := &corev1.Pod{Spec: corev1.PodSpec{SchedulerName: "test-sche"}}
-	if err := w.handler.Handle(pod); err != nil {
-		t.Fatal(err)
-	}
-	assert.Equal(t, true, reflect.DeepEqual(pod, hdl.obj), "deep equal")
+	require.NoError(t, w.handler.Handle(pod))
+	require.Equal(t, hdl.obj, pod, "pod")
 }
 
 func TestWatcher_GetClient(t *testing.T) {
@@ -142,7 +137,7 @@ func TestWatcher_GetClient(t *testing.T) {
 	wi := New("", "", &corev1.Pod{}, cli, fields.Everything())
 
 	w, ok := wi.(*watcher)
-	assert.Equal(t, true, ok, "assertion")
+	require.True(t, ok, "assertion")
 
 	pods := []*corev1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"}, Spec: corev1.PodSpec{SchedulerName: "test"}},
@@ -151,22 +146,16 @@ func TestWatcher_GetClient(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "test2", Namespace: "kube-system"}, Spec: corev1.PodSpec{SchedulerName: "system-2"}},
 	}
 	for _, pod := range pods {
-		if err := w.indexer.Add(pod); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, w.indexer.Add(pod))
 	}
 
 	c := NewCachedClient(w)
 
 	pod := &corev1.Pod{}
-	if err := c.Get(types.NamespacedName{Name: "test", Namespace: "default"}, pod); err != nil {
-		t.Fatal(err)
-	}
-	assert.Equal(t, "test", pod.Spec.SchedulerName, "test val")
+	require.NoError(t, c.Get(types.NamespacedName{Name: "test", Namespace: "default"}, pod))
+	require.Equal(t, "test", pod.Spec.SchedulerName, "test val")
 
-	if err := c.Get(types.NamespacedName{Name: "test3", Namespace: "default"}, pod); err == nil {
-		t.Fatal("not found error should occur")
-	}
+	require.Error(t, c.Get(types.NamespacedName{Name: "test3", Namespace: "default"}, pod))
 }
 
 func TestWatcher_Start(t *testing.T) {

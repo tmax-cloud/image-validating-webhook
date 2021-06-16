@@ -1,7 +1,7 @@
 package pods
 
 import (
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -65,7 +65,7 @@ func TestWhiteList_IsImageWhiteListed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := &WhiteList{byImages: c.list}
 			isWhitelisted := w.IsImageWhiteListed(c.image)
-			assert.Equal(t, c.expectedWhitelisted, isWhitelisted)
+			require.Equal(t, c.expectedWhitelisted, isWhitelisted)
 		})
 	}
 }
@@ -100,8 +100,8 @@ default`,
 				byNamespaces: c.unmarshalledNs,
 			}
 			img, ns := wl.Marshal()
-			assert.Equal(t, c.marshalledImage, img, "image")
-			assert.Equal(t, c.marshalledNs, ns, "ns")
+			require.Equal(t, c.marshalledImage, img, "image")
+			require.Equal(t, c.marshalledNs, ns, "ns")
 		})
 	}
 }
@@ -124,11 +124,9 @@ default`,
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
-			if err := wl.Unmarshal(c.marshalledImage, c.marshalledNs); err != nil {
-				t.Fatal(err)
-			}
-			assert.Equal(t, c.unmarshalledImage, wl.byImages, "image")
-			assert.Equal(t, c.unmarshalledNs, wl.byNamespaces, "ns")
+			require.NoError(t, wl.Unmarshal(c.marshalledImage, c.marshalledNs))
+			require.Equal(t, c.unmarshalledImage, wl.byImages, "image")
+			require.Equal(t, c.unmarshalledNs, wl.byNamespaces, "ns")
 		})
 	}
 }
@@ -149,10 +147,8 @@ img-validating-webhook`,
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
-			if err := wl.UnmarshalImage(c.marshalledImage); err != nil {
-				t.Fatal(err)
-			}
-			assert.Equal(t, c.unmarshalledImage, wl.byImages, "result")
+			require.NoError(t, wl.UnmarshalImage(c.marshalledImage))
+			require.Equal(t, c.unmarshalledImage, wl.byImages, "result")
 		})
 	}
 }
@@ -171,7 +167,7 @@ default`,
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
 			wl.UnmarshalNamespace(c.marshalledNs)
-			assert.Equal(t, c.unmarshalledNs, wl.byNamespaces, "result")
+			require.Equal(t, c.unmarshalledNs, wl.byNamespaces, "result")
 		})
 	}
 }
@@ -202,9 +198,13 @@ func TestWhiteList_UnmarshalLegacy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
 			err := wl.UnmarshalLegacy(c.marshalledImage, c.marshalledNs)
-			assert.Equal(t, c.fail, err != nil, "error occurs")
-			assert.Equal(t, c.unmarshalledImage, wl.byImages, "image")
-			assert.Equal(t, c.unmarshalledNs, wl.byNamespaces, "ns")
+			if c.fail {
+				require.Error(t, err, "error occurs")
+			} else {
+				require.NoError(t, err, "error occurs")
+			}
+			require.Equal(t, c.unmarshalledImage, wl.byImages, "image")
+			require.Equal(t, c.unmarshalledNs, wl.byNamespaces, "ns")
 		})
 	}
 }
@@ -232,8 +232,12 @@ func TestWhiteList_UnmarshalLegacyImage(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
 			err := wl.UnmarshalLegacyImage(c.marshalledImage)
-			assert.Equal(t, c.fail, err != nil, "error occurs")
-			assert.Equal(t, c.unmarshalledImage, wl.byImages, "result")
+			if c.fail {
+				require.Error(t, err, "error occurs")
+			} else {
+				require.NoError(t, err, "error occurs")
+			}
+			require.Equal(t, c.unmarshalledImage, wl.byImages, "result")
 		})
 	}
 }
@@ -258,8 +262,12 @@ func TestWhiteList_UnmarshalLegacyNamespace(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			wl := &WhiteList{}
 			err := wl.UnmarshalLegacyNamespace(c.marshalledNs)
-			assert.Equal(t, c.fail, err != nil, "error occurs")
-			assert.Equal(t, c.unmarshalledNs, wl.byNamespaces, "result")
+			if c.fail {
+				require.Error(t, err, "error occurs")
+			} else {
+				require.NoError(t, err, "error occurs")
+			}
+			require.Equal(t, c.unmarshalledNs, wl.byNamespaces, "result")
 		})
 	}
 }
@@ -312,10 +320,8 @@ func TestParseImage(t *testing.T) {
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			ref, err := parseImage(c.image)
-			if err != nil {
-				t.Fatal(err)
-			}
-			assert.Equal(t, c.ref, *ref)
+			require.NoError(t, err, "error occurs")
+			require.Equal(t, c.ref, *ref)
 		})
 	}
 }
@@ -346,7 +352,7 @@ func TestImageRef_String(t *testing.T) {
 
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, c.image, c.ref.String())
+			require.Equal(t, c.image, c.ref.String())
 		})
 	}
 }

@@ -2,9 +2,8 @@ package utils
 
 import (
 	"encoding/base64"
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	"reflect"
 	"testing"
 )
 
@@ -91,11 +90,12 @@ func TestNewImagePullSecret(t *testing.T) {
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			ps, err := NewImagePullSecret(c.secret)
-			assert.Equal(t, c.expectedErrorOccurs, err != nil, "error occurs")
-			if err != nil {
-				assert.Equal(t, c.expectedErrorString, err.Error(), "error string")
+			if c.expectedErrorOccurs {
+				require.Error(t, err, "error occurs")
+				require.Equal(t, c.expectedErrorString, err.Error(), "error string")
 			} else {
-				assert.Equal(t, true, reflect.DeepEqual(ps.json.Auths, c.expectedAuths), "auth result")
+				require.NoError(t, err, "error occurs")
+				require.Equal(t, c.expectedAuths, ps.json.Auths, "auth result")
 			}
 		})
 	}
@@ -168,11 +168,12 @@ func TestImagePullSecret_GetHostBasicAuth(t *testing.T) {
 			}
 
 			auth, err := ps.GetHostBasicAuth(c.host)
-			assert.Equal(t, c.expectedErrorOccurs, err != nil, "error occurs")
-			if err != nil {
-				assert.Equal(t, c.expectedErrorString, err.Error(), "error string")
+			if c.expectedErrorOccurs {
+				require.Error(t, err, "error occurs")
+				require.Equal(t, c.expectedErrorString, err.Error(), "error string")
 			} else {
-				assert.Equal(t, c.expectedAuth, auth, "basic auth")
+				require.NoError(t, err, "error occurs")
+				require.Equal(t, c.expectedAuth, auth, "basic auth")
 			}
 		})
 	}

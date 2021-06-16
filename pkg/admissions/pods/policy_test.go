@@ -3,7 +3,7 @@ package pods
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/require"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher/fake"
 	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
@@ -59,7 +59,7 @@ func TestSignerPolicyCache_doesMatchPolicy(t *testing.T) {
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			match := cache.doesMatchPolicy(c.key, c.namespace)
-			assert.Equal(t, c.expectedMatch, match, "match policy")
+			require.Equal(t, c.expectedMatch, match, "match policy")
 		})
 	}
 }

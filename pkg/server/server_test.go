@@ -1,7 +1,6 @@
 package server
 
 import (
-	"github.com/bmizerany/assert"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
 	"io/ioutil"
@@ -26,7 +25,7 @@ func TestAddHandlerInitiator(t *testing.T) {
 	AddHandlerInitiator("/test-1", []string{http.MethodGet}, func(_ *HandlerConfig) (http.Handler, error) {
 		return &testHandler{}, nil
 	})
-	assert.Equal(t, 1, len(handlerInitiators), "handlerInitiator length")
+	require.Len(t, handlerInitiators, 1, "handlerInitiator length")
 }
 
 type serverTestCase struct {
@@ -46,9 +45,7 @@ func TestServer(t *testing.T) {
 	})
 
 	s := Server{mux: mux.NewRouter(), server: &http.Server{}}
-	if err := s.addHandlersToServer(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, s.addHandlersToServer())
 
 	testSrv := httptest.NewServer(s.server.Handler)
 	testCli := testSrv.Client()
@@ -89,20 +86,14 @@ func TestServer(t *testing.T) {
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			req, err := http.NewRequest(c.method, testSrv.URL+c.path, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			resp, err := testCli.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
 			output, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
-			assert.Equal(t, c.expectedStatusCode, resp.StatusCode, "code")
+			require.Equal(t, c.expectedStatusCode, resp.StatusCode, "code")
 			require.Equal(t, c.expectedOutput, output, "output")
 		})
 	}

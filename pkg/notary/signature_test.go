@@ -2,7 +2,6 @@ package notary
 
 import (
 	"fmt"
-	"github.com/bmizerany/assert"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	notarytest "github.com/tmax-cloud/image-validating-webhook/pkg/notary/test"
@@ -67,12 +66,12 @@ func TestFetchSignature(t *testing.T) {
 				require.Nil(t, sig)
 			} else {
 				require.NotNil(t, sig)
-				assert.Equal(t, fmt.Sprintf("%s/%s", c.imgHost, c.imgRepo), sig.Name, "name")
-				assert.Equal(t, 1, len(sig.SignedTags), "tags length")
-				assert.Equal(t, c.imgTag, sig.SignedTags[0].SignedTag, "tag")
-				assert.Equal(t, 1, len(sig.SignedTags[0].Signers), "signer length")
-				assert.Equal(t, "Repo Admin", sig.SignedTags[0].Signers[0], "signer")
-				assert.Equal(t, c.expectedTargetKey, sig.AdministrativeKeys[1].Keys[0].ID, "target key id")
+				require.Equal(t, fmt.Sprintf("%s/%s", c.imgHost, c.imgRepo), sig.Name, "name")
+				require.Len(t, sig.SignedTags, 1, "tags length")
+				require.Equal(t, c.imgTag, sig.SignedTags[0].SignedTag, "tag")
+				require.Len(t, sig.SignedTags[0].Signers, 1, "signer length")
+				require.Equal(t, "Repo Admin", sig.SignedTags[0].Signers[0], "signer")
+				require.Equal(t, c.expectedTargetKey, sig.AdministrativeKeys[1].Keys[0].ID, "target key id")
 			}
 		})
 	}

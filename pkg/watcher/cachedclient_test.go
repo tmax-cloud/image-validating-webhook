@@ -1,13 +1,12 @@
 package watcher
 
 import (
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
 	"testing"
 )
 
@@ -62,21 +61,19 @@ func TestCachedClient_Get(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 			for _, o := range c.objs {
-				if err := indexer.Add(o); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, indexer.Add(o))
 			}
 
 			cc := &cachedClient{indexer: indexer}
 
 			out := c.expectedObj.DeepCopyObject()
 			err := cc.Get(c.getKey, out)
-			if err != nil {
-				assert.Equal(t, c.errorOccurs, true, "error occurs")
-				assert.Equal(t, c.errorMessage, err.Error(), "error message")
+			if c.errorOccurs {
+				require.Error(t, err, "error occurs")
+				require.Equal(t, c.errorMessage, err.Error(), "error message")
 			} else {
-				assert.Equal(t, c.errorOccurs, false, "error occurs")
-				assert.Equal(t, true, reflect.DeepEqual(c.expectedObj, out), "out object")
+				require.NoError(t, err)
+				require.Equal(t, c.expectedObj, out, "output")
 			}
 		})
 	}
@@ -143,21 +140,19 @@ func TestCachedClient_List(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 			for _, o := range c.objs {
-				if err := indexer.Add(o); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, indexer.Add(o))
 			}
 
 			cc := &cachedClient{indexer: indexer}
 
 			out := c.expectedObjectList.DeepCopyObject()
 			err := cc.List(Selector{Namespace: c.namespaceKey}, out)
-			if err != nil {
-				assert.Equal(t, c.errorOccurs, true, "error occurs")
-				assert.Equal(t, c.errorMessage, err.Error(), "error message")
+			if c.errorOccurs {
+				require.Error(t, err, "error occurs")
+				require.Equal(t, c.errorMessage, err.Error(), "error message")
 			} else {
-				assert.Equal(t, c.errorOccurs, false, "error occurs")
-				assert.Equal(t, true, reflect.DeepEqual(c.expectedObjectList, out), "out object")
+				require.NoError(t, err, "error occurs")
+				require.Equal(t, c.expectedObjectList, out, "output")
 			}
 		})
 	}
