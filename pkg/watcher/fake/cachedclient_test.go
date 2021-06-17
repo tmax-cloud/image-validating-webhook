@@ -1,14 +1,13 @@
 package fake
 
 import (
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/require"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"reflect"
 	"testing"
 )
 
@@ -81,12 +80,12 @@ func TestCachedClient_Get(t *testing.T) {
 
 			out := c.expectedObject.DeepCopyObject()
 			err := cli.Get(c.key, out)
-			if err != nil {
-				assert.Equal(t, c.errorOccurs, true, "error occurs")
-				assert.Equal(t, c.errorMessage, err.Error(), "error message")
+			if c.errorOccurs {
+				require.Error(t, err, "error occurs")
+				require.Equal(t, c.errorMessage, err.Error(), "error message")
 			} else {
-				assert.Equal(t, c.errorOccurs, false, "error occurs")
-				assert.Equal(t, true, reflect.DeepEqual(out, c.expectedObject), "deep equal output")
+				require.NoError(t, err, "error occurs")
+				require.Equal(t, c.expectedObject, out, "output")
 			}
 		})
 	}
@@ -142,12 +141,12 @@ func TestCachedClient_List(t *testing.T) {
 
 			out := c.expectedObjectList.DeepCopyObject()
 			err := cli.List(watcher.Selector{Namespace: c.namespaceKey}, out)
-			if err != nil {
-				assert.Equal(t, c.errorOccurs, true, "error occurs")
-				assert.Equal(t, c.errorMessage, err.Error(), "error message")
+			if c.errorOccurs {
+				require.Error(t, err, "error occurs")
+				require.Equal(t, c.errorMessage, err.Error(), "error message")
 			} else {
-				assert.Equal(t, c.errorOccurs, false, "error occurs")
-				assert.Equal(t, true, reflect.DeepEqual(out, c.expectedObjectList), "deep equal output")
+				require.NoError(t, err, "error occurs")
+				require.Equal(t, c.expectedObjectList, out, "output")
 			}
 		})
 	}
