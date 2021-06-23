@@ -17,7 +17,7 @@ spec:
         spec:
             containers:
                 - name: webhook
-                  image: tmaxcloudck/image-validation-webhook:v5.0.1
+                  image: tmaxcloudck/image-validation-webhook:v5.0.2
                   imagePullPolicy: IfNotPresent
                   volumeMounts:
                     - name: webhook-certs
