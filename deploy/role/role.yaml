@@ -4,35 +4,47 @@ kind: ClusterRole
 metadata:
   name: image-validation-webhook-role
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods/exec
-  - pods
-  - configmaps
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - tmax.io
-  resources:
-  - registries
-  - registries/status
-  - signerkeys
-  - signerpolicies
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
+  - apiGroups:
+      - ""
+    resources:
+      - pods/exec
+      - pods
+      - configmaps
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - tmax.io
+    resources:
+      - registries
+      - registries/status
+      - signerkeys
+      - signerpolicies
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - "admissionregistration.k8s.io"
+    resources:
+      - mutatingwebhookconfigurations
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch

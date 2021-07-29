@@ -13,7 +13,7 @@ webhooks:
         namespace: registry-system
         port: 443
         path: "/validate"
-      caBundle: "${CA_BUNDLE}"
+      caBundle: ""
     sideEffects: None
     rules:
       - operations: ["CREATE"]

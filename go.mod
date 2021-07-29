@@ -8,11 +8,13 @@ require (
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.6.1
 	github.com/theupdateframework/notary v0.6.2-0.20200804143915-84287fd8df4f
-	github.com/tmax-cloud/registry-operator v0.3.4-0.20210513064405-950fb7ad5930
+	github.com/tmax-cloud/registry-operator v0.4.0
+	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22 // indirect
 	k8s.io/api v0.19.4
 	k8s.io/apimachinery v0.19.4
 	k8s.io/client-go v0.19.4
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920 // indirect
+	knative.dev/pkg v0.0.0-20201127013335-0d896b5c87b8
 	sigs.k8s.io/controller-runtime v0.6.2
 )
 
