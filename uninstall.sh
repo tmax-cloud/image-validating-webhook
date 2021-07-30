@@ -2,7 +2,7 @@
 
 set -e
 
-kubectl delete -f deploy/validating-webhook-ca-bundle.yaml
+kubectl delete -f deploy/validating-webhook.yaml
 kubectl delete -f deploy/service.yaml
 kubectl delete -f deploy/deployment.yaml
 kubectl delete -f deploy/whitelist-configmap.yaml
