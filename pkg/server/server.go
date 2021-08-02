@@ -55,10 +55,10 @@ type Server struct {
 // New initiates a new Server instance
 func New(certFile, keyFile, addr string, cfg *rest.Config, clientSet kubernetes.Interface, restClient rest.Interface) *Server {
 	err := createCert(context.Background(), clientSet)
-	if err != nil{
+	if err != nil {
 		log.Println(err)
 	}
-	
+
 	srv := &Server{
 		server:   &http.Server{Addr: addr},
 		certFile: certFile,

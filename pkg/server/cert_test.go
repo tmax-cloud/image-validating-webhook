@@ -11,33 +11,32 @@ import (
 	mockClient "k8s.io/client-go/kubernetes/fake"
 )
 
-
 const (
 	testMutationConfName = "image-validation-admission"
-	defaultCABundle = "testByte"
-	modCABundle = "changedByte"
+	defaultCABundle      = "testByte"
+	modCABundle          = "changedByte"
 )
 
 type certTestCase struct {
-	name 			string
-	expectedError 	string
+	name          string
+	expectedError string
 }
 
 func TestCreateMutationConfig(t *testing.T) {
-	
+
 	tc := map[string]certTestCase{
 		"test-1": {
-			name: testMutationConfName,
+			name:          testMutationConfName,
 			expectedError: "",
 		},
 		"test-2": {
-			name: "wrongName",
+			name:          "wrongName",
 			expectedError: "not found",
 		},
 	}
-	
+
 	for name, c := range tc {
-		t.Run(name, func(t *testing.T){
+		t.Run(name, func(t *testing.T) {
 			var testClient = mockClient.NewSimpleClientset()
 			ctx := context.Background()
 			testWebHook := &admissionregistrationv1.MutatingWebhookConfiguration{
@@ -51,7 +50,7 @@ func TestCreateMutationConfig(t *testing.T) {
 					},
 				}},
 			}
-			
+
 			conf, err := testClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Create(ctx, testWebHook, v1.CreateOptions{})
 			assert.NoError(t, err)
 			updateName := conf.Name
@@ -60,7 +59,7 @@ func TestCreateMutationConfig(t *testing.T) {
 			err = createMutationConfig(ctx, []byte(modCABundle), testClient)
 
 			if testMutationConfName == c.name {
-				assert.NoError(t,err)
+				assert.NoError(t, err)
 				conf, err := testClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(ctx, testMutationConfName, v1.GetOptions{})
 				assert.NoError(t, err)
 				caBundle := conf.Webhooks[0].ClientConfig.CABundle

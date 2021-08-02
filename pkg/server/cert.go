@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	serviceName = "image-validation-admission-svc"
-	nameSpace = "registry-system"
+	serviceName      = "image-validation-admission-svc"
+	nameSpace        = "registry-system"
 	mutationConfName = "image-validation-admission"
-	certDir = "/tmp/certs/cert.pem"
-	keyDir = "/tmp/certs/key.pem"
-	baseDir = "/tmp/certs/"
+	certDir          = "/tmp/certs/cert.pem"
+	keyDir           = "/tmp/certs/key.pem"
+	baseDir          = "/tmp/certs/"
 )
 
 // Create self-signed certification
@@ -25,7 +25,7 @@ func createCert(ctx context.Context, client kubernetes.Interface) error {
 	svc := serviceName
 	ns := nameSpace
 
-	serverKey, serverCrt, caCrt, err := certResources.CreateCerts(ctx, svc, ns, time.Now().AddDate(1,0,0))
+	serverKey, serverCrt, caCrt, err := certResources.CreateCerts(ctx, svc, ns, time.Now().AddDate(1, 0, 0))
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func createCert(ctx context.Context, client kubernetes.Interface) error {
 	if err = createMutationConfig(ctx, caCrt, client); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -56,11 +56,11 @@ func createMutationConfig(ctx context.Context, caCrt []byte, client kubernetes.I
 	}
 
 	mutateconfig.Webhooks[0].ClientConfig.CABundle = caCrt
-	
-	_ , err = client.AdmissionregistrationV1().MutatingWebhookConfigurations().Update(ctx, mutateconfig, v1.UpdateOptions{})
+
+	_, err = client.AdmissionregistrationV1().MutatingWebhookConfigurations().Update(ctx, mutateconfig, v1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
-	
+
 	return nil
 }
