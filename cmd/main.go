@@ -1,8 +1,9 @@
 package main
 
 import (
-	"k8s.io/client-go/kubernetes"
 	"log"
+
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -14,10 +15,10 @@ import (
 
 func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
-	log.Println("Starting server ...")
+	log.Println("Starting server ...!!")
 
-	cert := "/etc/webhook/certs/cert.pem"
-	key := "/etc/webhook/certs/key.pem"
+	cert := "/tmp/certs/cert.pem"
+	key := "/tmp/certs/key.pem"
 	listenOn := "0.0.0.0:8443"
 
 	// Create config, clients

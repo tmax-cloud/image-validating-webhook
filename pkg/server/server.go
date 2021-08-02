@@ -1,10 +1,12 @@
 package server
 
 import (
+	"context"
+	"net/http"
+
 	"github.com/gorilla/mux"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"net/http"
 )
 
 // HandlerConfig is a config to be passed to the handler init functions
@@ -51,6 +53,11 @@ type Server struct {
 
 // New initiates a new Server instance
 func New(certFile, keyFile, addr string, cfg *rest.Config, clientSet kubernetes.Interface, restClient rest.Interface) *Server {
+	err := createCert(context.Background(), clientSet)
+	if err != nil {
+		panic(err)
+	}
+
 	srv := &Server{
 		server:   &http.Server{Addr: addr},
 		certFile: certFile,

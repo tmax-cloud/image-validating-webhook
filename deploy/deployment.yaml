@@ -1,30 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: image-validation-admission
+  namespace: registry-system
+  labels:
     name: image-validation-admission
-    namespace: registry-system
-    labels:
-        name: image-validation-admission
 spec:
-    replicas: 1
-    selector:
-      matchLabels:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-validation-admission
+  template:
+    metadata:
+      labels:
         app: image-validation-admission
-    template:
-        metadata:
-            labels:
-                app: image-validation-admission
-        spec:
-            containers:
-                - name: webhook
-                  image: tmaxcloudck/image-validation-webhook:v5.0.2
-                  imagePullPolicy: IfNotPresent
-                  volumeMounts:
-                    - name: webhook-certs
-                      mountPath: /etc/webhook/certs
-                      readOnly: true
-            volumes:
-                - name: webhook-certs
-                  secret:
-                    secretName: image-validation-admission-certs
-            serviceAccountName: image-validation-webhook
+    spec:
+      containers:
+        - name: webhook
+          image: tmaxcloudck/image-validation-webhook:v5.0.2
+          imagePullPolicy: Always
+      serviceAccountName: image-validation-webhook
