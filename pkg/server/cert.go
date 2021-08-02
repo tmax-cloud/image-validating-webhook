@@ -41,7 +41,7 @@ func createCert(ctx context.Context, client kubernetes.Interface) error {
 	if err = ioutil.WriteFile(baseDir+keyName, serverKey, 0644); err != nil {
 		return err
 	}
-	
+
 	if err = updateMutationConfig(ctx, caCrt, client); err != nil {
 		return err
 	}
