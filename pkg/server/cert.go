@@ -15,8 +15,8 @@ const (
 	serviceName      = "image-validation-admission-svc"
 	nameSpace        = "registry-system"
 	mutationConfName = "image-validation-admission"
-	certDir          = "/tmp/certs/cert.pem"
-	keyDir           = "/tmp/certs/key.pem"
+	certName          = "cert.pem"
+	keyName           = "key.pem"
 	baseDir          = "/tmp/certs/"
 )
 
@@ -34,22 +34,22 @@ func createCert(ctx context.Context, client kubernetes.Interface) error {
 		return err
 	}
 
-	if err = ioutil.WriteFile(certDir, serverCrt, 0644); err != nil {
+	if err = ioutil.WriteFile(baseDir + certName, serverCrt, 0644); err != nil {
 		return err
 	}
 
-	if err = ioutil.WriteFile(keyDir, serverKey, 0644); err != nil {
+	if err = ioutil.WriteFile(baseDir + keyName, serverKey, 0644); err != nil {
 		return err
 	}
 
-	if err = createMutationConfig(ctx, caCrt, client); err != nil {
+	if err = updateMutationConfig(ctx, caCrt, client); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func createMutationConfig(ctx context.Context, caCrt []byte, client kubernetes.Interface) error {
+func updateMutationConfig(ctx context.Context, caCrt []byte, client kubernetes.Interface) error {
 	mutateconfig, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(ctx, mutationConfName, v1.GetOptions{})
 	if err != nil {
 		return err

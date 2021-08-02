@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -56,7 +55,7 @@ type Server struct {
 func New(certFile, keyFile, addr string, cfg *rest.Config, clientSet kubernetes.Interface, restClient rest.Interface) *Server {
 	err := createCert(context.Background(), clientSet)
 	if err != nil {
-		log.Println(err)
+		panic(err)
 	}
 
 	srv := &Server{

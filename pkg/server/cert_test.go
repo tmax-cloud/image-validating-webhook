@@ -56,7 +56,7 @@ func TestCreateMutationConfig(t *testing.T) {
 			updateName := conf.Name
 			assert.Equal(t, c.name, updateName)
 
-			err = createMutationConfig(ctx, []byte(modCABundle), testClient)
+			err = updateMutationConfig(ctx, []byte(modCABundle), testClient)
 
 			if testMutationConfName == c.name {
 				assert.NoError(t, err)
