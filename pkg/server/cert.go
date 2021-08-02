@@ -15,8 +15,8 @@ const (
 	serviceName      = "image-validation-admission-svc"
 	nameSpace        = "registry-system"
 	mutationConfName = "image-validation-admission"
-	certName          = "cert.pem"
-	keyName           = "key.pem"
+	certName         = "cert.pem"
+	keyName          = "key.pem"
 	baseDir          = "/tmp/certs/"
 )
 
@@ -34,14 +34,14 @@ func createCert(ctx context.Context, client kubernetes.Interface) error {
 		return err
 	}
 
-	if err = ioutil.WriteFile(baseDir + certName, serverCrt, 0644); err != nil {
+	if err = ioutil.WriteFile(baseDir+certName, serverCrt, 0644); err != nil {
 		return err
 	}
 
-	if err = ioutil.WriteFile(baseDir + keyName, serverKey, 0644); err != nil {
+	if err = ioutil.WriteFile(baseDir+keyName, serverKey, 0644); err != nil {
 		return err
 	}
-
+	
 	if err = updateMutationConfig(ctx, caCrt, client); err != nil {
 		return err
 	}
