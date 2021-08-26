@@ -1,24 +1,25 @@
 package pods
 
 import (
-	"context"
+	"fmt"
+	"log"
+
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher"
-	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/rest"
-	"log"
 )
 
-// SignerPolicyCache is a cache of type.SignerPolicy
-type SignerPolicyCache struct {
+// RegistryPolicyCache is a cache of type.RegistrySecurityPolicy
+type RegistryPolicyCache struct {
 	restClient rest.Interface
 
-	cachedClient watcher.CachedClient
+	clusterCachedClient   watcher.CachedClient
+	namespaceCachedClient watcher.CachedClient
 }
 
-func newSignerPolicyCache(cfg *rest.Config, restClient rest.Interface) (*SignerPolicyCache, error) {
+func newRegistryPolicyCache(cfg *rest.Config, restClient rest.Interface) (*RegistryPolicyCache, error) {
 	// Create watcher client for whv1
 	watchCli, err := k8s.NewGroupVersionClient(cfg, whv1.GroupVersion)
 	if err != nil {
@@ -26,51 +27,65 @@ func newSignerPolicyCache(cfg *rest.Config, restClient rest.Interface) (*SignerP
 	}
 
 	// Initiate watcher
-	w := watcher.New("", "signerpolicies", &whv1.SignerPolicy{}, watchCli, fields.Everything())
+	nw := watcher.New("", "registrysecuritypolicies", &whv1.RegistrySecurityPolicy{}, watchCli, fields.Everything())
+	cw := watcher.New("", "clusterregistrysecuritypolicies", &whv1.ClusterRegistrySecurityPolicy{}, watchCli, fields.Everything())
 
-	p := &SignerPolicyCache{
-		restClient:   restClient,
-		cachedClient: watcher.NewCachedClient(w),
+	p := &RegistryPolicyCache{
+		restClient:            restClient,
+		clusterCachedClient:   watcher.NewCachedClient(cw),
+		namespaceCachedClient: watcher.NewCachedClient(nw),
 	}
 
-	waitCh := make(chan struct{})
+	waitChCluster := make(chan struct{})
+	waitChNamespace := make(chan struct{})
 
-	// Start to watch SignerPolicy
-	go w.Start(waitCh)
+	// Start to watch RegistrySecurityPolicy
+	go cw.Start(waitChCluster)
+	go nw.Start(waitChNamespace)
 
 	// Block until it's ready
-	<-waitCh
+	<-waitChCluster
+	<-waitChNamespace
 
 	return p, nil
 }
 
-func (c *SignerPolicyCache) doesMatchPolicy(key, namespace string) bool {
-	objs := &whv1.SignerPolicyList{}
-	if err := c.cachedClient.List(watcher.Selector{Namespace: namespace}, objs); err != nil {
+func (c *RegistryPolicyCache) doesMatchPolicy(registry string, namespace string) (bool, whv1.RegistrySpec) {
+	clusterObjs := &whv1.ClusterRegistrySecurityPolicyList{}
+	namespaceObjs := &whv1.RegistrySecurityPolicyList{}
+
+	if err := c.clusterCachedClient.List(watcher.Selector{Namespace: ""}, clusterObjs); err != nil {
 		log.Println(err)
-		return false
+		return false, whv1.RegistrySpec{}
+	}
+	if err := c.namespaceCachedClient.List(watcher.Selector{Namespace: namespace}, namespaceObjs); err != nil {
+		log.Println(err)
+		return false, whv1.RegistrySpec{}
 	}
 
-	// If no policy but is signed, it's valid
-	if len(objs.Items) == 0 {
-		return true
+	if registry == "" {
+		registry = "docker.io"
 	}
 
-	for _, signerPolicy := range objs.Items {
-		for _, signerName := range signerPolicy.Spec.Signers {
-			signer := &regv1.SignerKey{}
-			if err := c.restClient.Get().AbsPath("apis/tmax.io/v1").Resource("signerkeys").Name(signerName).Do(context.Background()).Into(signer); err != nil {
-				log.Printf("signer getting error by %s", err)
-				continue
-			}
-
-			for _, targetKey := range signer.Spec.Targets {
-				if targetKey.ID == key {
-					return true
-				}
+	if len(clusterObjs.Items) == 0 && len(namespaceObjs.Items) == 0 {
+		return true, whv1.RegistrySpec{}
+	}
+	for i := range clusterObjs.Items {
+		for j := range clusterObjs.Items[i].Spec.Registries {
+			if clusterObjs.Items[i].Spec.Registries[j].Registry == registry {
+				return true, clusterObjs.Items[i].Spec.Registries[j]
 			}
 		}
 	}
+	for i := range namespaceObjs.Items {
+		for j := range namespaceObjs.Items[i].Spec.Registries {
+			if namespaceObjs.Items[i].Spec.Registries[j].Registry == registry {
+				return true, namespaceObjs.Items[i].Spec.Registries[j]
+			}
+		}
+	}
+	err := fmt.Errorf("no matching registry security policy")
+	log.Println(err)
 
-	return false
+	return false, whv1.RegistrySpec{}
 }

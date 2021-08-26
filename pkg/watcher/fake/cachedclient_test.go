@@ -1,6 +1,8 @@
 package fake
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher"
@@ -8,7 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"testing"
 )
 
 type testCachedClientGetTestCase struct {
@@ -47,16 +48,16 @@ func TestCachedClient_Get(t *testing.T) {
 				Data: map[string]string{"testKey": "testVal"},
 			},
 		},
-		"signerPolicy": {
+		"registrySecurityPolicy": {
 			cacheMap: map[string]runtime.Object{
-				"default/test": &whv1.SignerPolicy{
-					Spec: whv1.SignerPolicySpec{Signers: []string{"test-signer"}},
+				"default/test": &whv1.RegistrySecurityPolicy{
+					Spec: whv1.RegistrySecurityPolicySpec{Registries: []whv1.RegistrySpec{{Registry: "testRegistry", Notary: "", SignCheck: false}}},
 				},
 			},
 			key:         types.NamespacedName{Name: "test", Namespace: "default"},
 			errorOccurs: false,
-			expectedObject: &whv1.SignerPolicy{
-				Spec: whv1.SignerPolicySpec{Signers: []string{"test-signer"}},
+			expectedObject: &whv1.RegistrySecurityPolicy{
+				Spec: whv1.RegistrySecurityPolicySpec{Registries: []whv1.RegistrySpec{{Registry: "testRegistry", Notary: "", SignCheck: false}}},
 			},
 		},
 		"notFound": {

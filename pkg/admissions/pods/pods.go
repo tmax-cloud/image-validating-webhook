@@ -1,16 +1,14 @@
 package pods
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/tmax-cloud/image-validating-webhook/pkg/server"
-	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
 	"io/ioutil"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	"log"
 	"net/http"
+
+	"github.com/tmax-cloud/image-validating-webhook/pkg/server"
+	"k8s.io/client-go/kubernetes/scheme"
 
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	core "k8s.io/api/core/v1"
@@ -33,7 +31,7 @@ type ImageAdmission struct {
 
 // NewPodsAdmissionHandler initiates a new image validation admission handler
 func NewPodsAdmissionHandler(cfg *server.HandlerConfig) (http.Handler, error) {
-	v, err := newValidator(cfg.RestCfg, cfg.ClientSet, cfg.RestClient, getFindHyperCloudNotaryServerFn(cfg.RestClient))
+	v, err := newValidator(cfg.RestCfg, cfg.ClientSet, cfg.RestClient)
 	if err != nil {
 		return nil, err
 	}
@@ -140,33 +138,6 @@ func writeReviewResponse(review *admissionv1beta1.AdmissionReview, w http.Respon
 		return err
 	}
 	return nil
-}
-
-func getFindHyperCloudNotaryServerFn(restClient rest.Interface) findNotaryServerFn {
-	return func(registry string) string {
-		if registry == "docker.io" {
-			return ""
-		}
-
-		var targetReg *regv1.Registry
-		regList := &regv1.RegistryList{}
-		if err := restClient.Get().AbsPath("/apis/tmax.io/v1").Resource("registries").Do(context.Background()).Into(regList); err != nil {
-			log.Printf("reg list err %s", err)
-		}
-		for _, reg := range regList.Items {
-			if "https://"+registry == reg.Status.ServerURL {
-				targetReg = &reg
-				break
-			}
-		}
-
-		if targetReg == nil {
-			log.Printf("No matched registry named: %s. Couldn't find notary server", registry)
-			return ""
-		}
-
-		return targetReg.Status.NotaryURL
-	}
 }
 
 type patchOperation struct {

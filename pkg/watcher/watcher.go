@@ -2,14 +2,15 @@ package watcher
 
 import (
 	"fmt"
+	"log"
+	"time"
+
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	"log"
-	"time"
 )
 
 // Handler an interface for watch events

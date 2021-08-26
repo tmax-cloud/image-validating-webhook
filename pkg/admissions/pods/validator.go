@@ -3,6 +3,8 @@ package pods
 import (
 	"context"
 	"fmt"
+	"log"
+
 	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/notary"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
@@ -11,7 +13,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"log"
 )
 
 func init() {
@@ -32,24 +33,19 @@ type Validator interface {
 type validator struct {
 	client kubernetes.Interface
 
-	findNotaryServer findNotaryServerFn
-
-	signerPolicyCache *SignerPolicyCache
-	whiteList         *WhiteList
+	registryPolicyCache *RegistryPolicyCache
+	whiteList           *WhiteList
 }
 
-type findNotaryServerFn func(registryHost string) string
-
-func newValidator(cfg *rest.Config, clientSet kubernetes.Interface, restClient rest.Interface, findNotaryFn findNotaryServerFn) (*validator, error) {
+func newValidator(cfg *rest.Config, clientSet kubernetes.Interface, restClient rest.Interface) (*validator, error) {
 	v := &validator{
-		client:           clientSet,
-		findNotaryServer: findNotaryFn,
+		client: clientSet,
 	}
 
 	var err error
 
-	// Initiate SignerPolicy cache
-	v.signerPolicyCache, err = newSignerPolicyCache(cfg, restClient)
+	// Initiate RegistryPolicy cache
+	v.registryPolicyCache, err = newRegistryPolicyCache(cfg, restClient)
 	if err != nil {
 		return nil, err
 	}
@@ -104,19 +100,24 @@ func (h *validator) addDigestWhenImageValid(containers []corev1.Container, names
 			return false, "", err
 		}
 
-		// Get trust info of the image
-		sig, err := notary.FetchSignature(container.Image, basicAuth, h.findNotaryServer(ref.host))
-		if err != nil {
-			log.Println(err)
-			return false, "", err
-		}
-		// sig is nil if it's not signed
-		if sig == nil {
-			return false, fmt.Sprintf("Image '%s' is not signed", container.Image), nil
-		}
+		// Check if it meets registry security policy
+		if valid, policy := h.registryPolicyCache.doesMatchPolicy(ref.host, namespace); valid && policy.Registry == "" {
+			return true, "", nil
+		} else if valid {
+			if !policy.SignCheck {
+				return true, "", nil
+			}
+			// Get trust info of the image
+			sig, err := notary.FetchSignature(container.Image, basicAuth, policy.Notary)
+			if err != nil {
+				log.Println(err)
+				return false, "", err
+			}
+			// sig is nil if it's not signed
+			if sig == nil {
+				return false, fmt.Sprintf("Image '%s' is not signed", container.Image), nil
+			}
 
-		// Check if it meets signer policy
-		if h.signerPolicyCache.doesMatchPolicy(sig.GetRepoAdminKey(), namespace) {
 			digest := sig.GetDigest(ref.tag)
 
 			// If digest is different from user-specified one, return error
@@ -126,13 +127,12 @@ func (h *validator) addDigestWhenImageValid(containers []corev1.Container, names
 
 			ref.digest = digest
 			containers[i].Image = ref.String()
+
 			return true, "", nil
 		}
-
-		// Does NOT match signer policy
-		return false, fmt.Sprintf("Image '%s' does not meet signer policy. Please check the namespace's SignerPolicy", container.Image), nil
+		// Does NOT match registry security policy
+		return false, fmt.Sprintf("Image '%s' does not meet registry security policy. Please check the RegistrySecurityPolicy", container.Image), nil
 	}
-
 	return true, "", nil
 }
 

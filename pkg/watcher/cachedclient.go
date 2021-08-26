@@ -2,6 +2,9 @@ package watcher
 
 import (
 	"fmt"
+	"reflect"
+	"sort"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -9,8 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
-	"sort"
 )
 
 // CachedClient is a reader from the cache
