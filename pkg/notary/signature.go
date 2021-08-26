@@ -2,12 +2,13 @@ package notary
 
 import (
 	"fmt"
-	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
-	"github.com/tmax-cloud/registry-operator/pkg/image"
-	"github.com/tmax-cloud/registry-operator/pkg/trust"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
+	"github.com/tmax-cloud/image-validating-webhook/pkg/image"
+	"github.com/tmax-cloud/image-validating-webhook/pkg/trust"
 )
 
 // Signature is a sign info of an image

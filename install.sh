@@ -2,7 +2,8 @@
 
 set -e
 
-kubectl apply -f config/crd/tmax.io_signerpolicies.yaml
+kubectl apply -f config/crd/tmax.io_clusterregistrysecuritypolicies.yaml
+kubectl apply -f config/crd/tmax.io_registrysecuritypolicies.yaml
 kubectl apply -f deploy/role/account.yaml
 kubectl apply -f deploy/role/role.yaml
 kubectl apply -f deploy/role/role-binding.yaml

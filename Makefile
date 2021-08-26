@@ -92,11 +92,14 @@ compare-sha-gen:
 	@if [ "${GENSHA_AFTER}" = "${GENSHA}" ]; then echo "zz_generated.deepcopy.go is not changed"; else echo "zz_generated.deepcopy.go file is changed"; exit 1; fi
 
 save-sha-crd:
-	$(eval CRDSHA1=$(shell sha512sum config/crd/tmax.io_signerpolicies.yaml))
+	$(eval CRDSHA1=$(shell sha512sum config/crd/tmax.io_registrysecuritypolicies.yaml))
+	$(eval CRDSHA2=$(shell sha512sum config/crd/tmax.io_clusterregistrysecuritypolicies.yaml))
 
 compare-sha-crd:
-	$(eval CRDSHA1_AFTER=$(shell sha512sum config/crd/tmax.io_signerpolicies.yaml))
-	@if [ "${CRDSHA1_AFTER}" = "${CRDSHA1}" ]; then echo "tmax.io_signerpolicies.yaml is not changed"; else echo "tmax.io_signerpolicies.yaml file is changed"; exit 1; fi
+	$(eval CRDSHA1_AFTER=$(shell sha512sum config/crd/tmax.io_registrysecuritypolicies.yaml))
+	@if [ "${CRDSHA1_AFTER}" = "${CRDSHA1}" ]; then echo "tmax.io_registrysecuritypolicies.yaml is not changed"; else echo "tmax.io_registrysecuritypolicies.yaml file is changed"; exit 1; fi
+	$(eval CRDSHA2_AFTER=$(shell sha512sum config/crd/tmax.io_clusterregistrysecuritypolicies.yaml))
+	@if [ "${CRDSHA2_AFTER}" = "${CRDSHA2}" ]; then echo "tmax.io_clusterregistrysecuritypolicies.yaml is not changed"; else echo "tmax.io_clusterregistrysecuritypolicies.yaml file is changed"; exit 1; fi
 
 save-sha-mod:
 	$(eval MODSHA=$(shell sha512sum go.mod))

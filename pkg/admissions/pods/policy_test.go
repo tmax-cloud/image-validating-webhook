@@ -2,55 +2,89 @@ package pods
 
 import (
 	"bytes"
-	"encoding/json"
+	"io/ioutil"
+	"net/http"
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher/fake"
-	regv1 "github.com/tmax-cloud/registry-operator/api/v1"
-	"io/ioutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	restfake "k8s.io/client-go/rest/fake"
-	"net/http"
-	"testing"
 )
 
 type doesMatchPolicyTestCase struct {
-	key       string
+	registry  string
 	namespace string
 
-	expectedMatch bool
+	expectedValid  bool
+	expectedPolicy whv1.RegistrySpec
 }
 
-func TestSignerPolicyCache_doesMatchPolicy(t *testing.T) {
+func TestRegistryPolicyCache_doesMatchPolicy(t *testing.T) {
 	tc := map[string]doesMatchPolicyTestCase{
-		"noPolicy": {
-			key:           "dummy",
-			namespace:     testNsNoPolicy,
-			expectedMatch: true,
-		},
 		"notMatchPolicy": {
-			key:           "no-match-key",
-			namespace:     testNsPolicy,
-			expectedMatch: false,
+			registry:       "no-match-registry",
+			namespace:      testCheckSign,
+			expectedValid:  false,
+			expectedPolicy: whv1.RegistrySpec{},
 		},
-		"matchPolicy": {
-			key:           "match-key",
-			namespace:     testNsPolicy,
-			expectedMatch: true,
+		"clusterPolicy": {
+			registry:      "testRegistry1",
+			namespace:     testCheckSign,
+			expectedValid: true,
+			expectedPolicy: whv1.RegistrySpec{
+				Registry:  "testRegistry1",
+				Notary:    "",
+				SignCheck: false,
+			},
+		},
+		"namespacePolicy": {
+			registry:      "testRegistry2",
+			namespace:     testCheckSign,
+			expectedValid: true,
+			expectedPolicy: whv1.RegistrySpec{
+				Registry:  "testRegistry2",
+				Notary:    "",
+				SignCheck: false,
+			},
 		},
 	}
 
-	cache := SignerPolicyCache{restClient: testPolicyRestClient(), cachedClient: &fake.CachedClient{
+	cache := RegistryPolicyCache{restClient: testPolicyRestClient(), clusterCachedClient: &fake.CachedClient{
 		Cache: map[string]runtime.Object{
-			testNsPolicy + "/policy1": &whv1.SignerPolicy{
+			testCheckSign + "/policy1": &whv1.ClusterRegistrySecurityPolicy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "policy1",
-					Namespace: testNsPolicy,
+					Name: "policy1",
 				},
-				Spec: whv1.SignerPolicySpec{
-					Signers: []string{"signer1"},
+				Spec: whv1.ClusterRegistrySecurityPolicySpec{
+					Registries: []whv1.RegistrySpec{
+						{
+							Registry:  "testRegistry1",
+							Notary:    "",
+							SignCheck: false,
+						},
+					},
+				},
+			},
+		},
+	}, namespaceCachedClient: &fake.CachedClient{
+		Cache: map[string]runtime.Object{
+			testCheckSign + "/policy2": &whv1.RegistrySecurityPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "policy2",
+					Namespace: testCheckSign,
+				},
+				Spec: whv1.RegistrySecurityPolicySpec{
+					Registries: []whv1.RegistrySpec{
+						{
+							Registry:  "testRegistry2",
+							Notary:    "",
+							SignCheck: false,
+						},
+					},
 				},
 			},
 		},
@@ -58,8 +92,9 @@ func TestSignerPolicyCache_doesMatchPolicy(t *testing.T) {
 
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
-			match := cache.doesMatchPolicy(c.key, c.namespace)
-			require.Equal(t, c.expectedMatch, match, "match policy")
+			valid, policy := cache.doesMatchPolicy(c.registry, c.namespace)
+			require.Equal(t, c.expectedValid, valid)
+			require.Equal(t, c.expectedPolicy, policy)
 		})
 	}
 }
@@ -70,21 +105,7 @@ func testPolicyRestClient() *restfake.RESTClient {
 		GroupVersion:         whv1.GroupVersion,
 		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
 		Client: restfake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
-			// SignerKeys
-			if sk := regSignerKeyPath.FindAllStringSubmatch(req.URL.Path, -1); len(sk) == 1 {
-				b, err := json.Marshal(&regv1.SignerKey{
-					Spec: regv1.SignerKeySpec{
-						Targets: map[string]regv1.TrustKey{
-							"dummyKey": {ID: "match-key"},
-						},
-					},
-				})
-				if err != nil {
-					return nil, err
-				}
-				return &http.Response{StatusCode: http.StatusOK, Body: ioutil.NopCloser(bytes.NewReader(b))}, nil
-			}
-			return &http.Response{StatusCode: http.StatusNotFound, Body: ioutil.NopCloser(&bytes.Buffer{})}, nil
+			return &http.Response{StatusCode: http.StatusOK, Body: ioutil.NopCloser(&bytes.Buffer{})}, nil
 		}),
 	}
 }
