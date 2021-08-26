@@ -1,5 +1,5 @@
 # Current version
-VERSION ?= v5.0.2
+VERSION ?= v5.0.3
 REGISTRY ?= tmaxcloudck
 
 # Image URL to use all building/pushing image targets
