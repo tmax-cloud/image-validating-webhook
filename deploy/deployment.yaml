@@ -17,6 +17,6 @@ spec:
     spec:
       containers:
         - name: webhook
-          image: tmaxcloudck/image-validation-webhook:v5.0.2
+          image: tmaxcloudck/image-validation-webhook:v5.0.3
           imagePullPolicy: Always
       serviceAccountName: image-validation-webhook
