@@ -2,13 +2,14 @@ package notary
 
 import (
 	"fmt"
+	"os"
+	"testing"
+
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	notarytest "github.com/tmax-cloud/image-validating-webhook/pkg/notary/test"
-	"os"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"testing"
 )
 
 const (
@@ -25,7 +26,6 @@ type signatureTestCase struct {
 	imgTag  string
 
 	expectedSignatureNil bool
-	expectedTargetKey    string
 }
 
 func TestFetchSignature(t *testing.T) {
@@ -38,7 +38,7 @@ func TestFetchSignature(t *testing.T) {
 	testSrv, err := notarytest.New(false)
 	require.NoError(t, err)
 
-	signedTargetKey, err := testSrv.SignImage(testSrv.URL, testRegistryHost, testImageSigned, testImageTag, "111111111111111111111111111111")
+	_, err = testSrv.SignImage(testSrv.URL, testRegistryHost, testImageSigned, testImageTag, "111111111111111111111111111111")
 	require.NoError(t, err)
 
 	tc := map[string]signatureTestCase{
@@ -47,7 +47,6 @@ func TestFetchSignature(t *testing.T) {
 			imgRepo:              testImageSigned,
 			imgTag:               testImageTag,
 			expectedSignatureNil: false,
-			expectedTargetKey:    signedTargetKey,
 		},
 		"unsigned": {
 			imgHost:              testRegistryHost,
@@ -71,7 +70,6 @@ func TestFetchSignature(t *testing.T) {
 				require.Equal(t, c.imgTag, sig.SignedTags[0].SignedTag, "tag")
 				require.Len(t, sig.SignedTags[0].Signers, 1, "signer length")
 				require.Equal(t, "Repo Admin", sig.SignedTags[0].Signers[0], "signer")
-				require.Equal(t, c.expectedTargetKey, sig.AdministrativeKeys[1].Keys[0].ID, "target key id")
 			}
 		})
 	}
