@@ -13,10 +13,8 @@ import (
 
 // Signature is a sign info of an image
 type Signature struct {
-	Name               string      `json:"Name"`
-	SignedTags         []SignedTag `json:"SignedTags"`
-	Signers            []Signer    `json:"Signer"`
-	AdministrativeKeys []AdminKey  `json:"AdministrativeKeys"`
+	Name       string      `json:"Name"`
+	SignedTags []SignedTag `json:"SignedTags"`
 }
 
 // SignedTag is a tag-signature info
@@ -24,32 +22,6 @@ type SignedTag struct {
 	SignedTag string   `json:"SignedTag"`
 	Digest    string   `json:"Digest"`
 	Signers   []string `json:"Signers"`
-}
-
-// Signer is a signer struct
-type Signer struct {
-}
-
-// AdminKey is a key for admin
-type AdminKey struct {
-	Name string `json:"Name"`
-	Keys []Key  `json:"Keys"`
-}
-
-// Key is a key struct
-type Key struct {
-	ID string `json:"ID"`
-}
-
-// GetRepoAdminKey gets admin key for the repository
-func (s *Signature) GetRepoAdminKey() string {
-	for _, key := range s.AdministrativeKeys {
-		if key.Name == "Repository" {
-			return key.Keys[0].ID
-		}
-	}
-
-	return ""
 }
 
 // GetDigest gets signed digest for the tag
@@ -65,7 +37,7 @@ func (s *Signature) GetDigest(tag string) string {
 
 // FetchSignature fetches a signature from the notary server
 func FetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error) {
-	img, err := image.NewImage(imageUri, "", basicAuth, nil)
+	img, err := image.NewImage(imageUri, basicAuth)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -108,17 +80,5 @@ func FetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error
 			Signers:   t.Signers,
 		})
 	}
-	for _, a := range signedRepo.AdministrativeKeys {
-		var keys []Key
-		for _, k := range a.Keys {
-			keys = append(keys, Key{ID: k.ID})
-		}
-
-		sig.AdministrativeKeys = append(sig.AdministrativeKeys, AdminKey{
-			Name: a.Name,
-			Keys: keys,
-		})
-	}
-
 	return &sig, nil
 }

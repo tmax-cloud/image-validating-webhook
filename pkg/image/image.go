@@ -2,7 +2,6 @@ package image
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"net/http"
 	"path"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/auth"
-	"github.com/tmax-cloud/image-validating-webhook/pkg/certs"
 
 	"github.com/docker/distribution/reference"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -53,23 +51,12 @@ type Image struct {
 }
 
 // NewImage creates new image client
-func NewImage(uri, registryServer, basicAuth string, ca []byte) (*Image, error) {
+func NewImage(uri, basicAuth string) (*Image, error) {
 	r := &Image{}
-
-	// Server url
-	if registryServer == "" || strings.HasPrefix(uri, DefaultHostname) {
-		r.ServerURL = DefaultServer
-	} else {
-		// set protocol scheme
-		if !strings.HasPrefix(registryServer, "http://") && !strings.HasPrefix(registryServer, "https://") {
-			registryServer = "https://" + registryServer
-		}
-		r.ServerURL = registryServer
-	}
 
 	// Set image
 	if uri != "" {
-		if err := r.SetImage(uri); err != nil {
+		if err := r.setImage(uri); err != nil {
 			Logger.Error(err, "failed to set image", "uri", uri)
 			return nil, err
 		}
@@ -81,58 +68,23 @@ func NewImage(uri, registryServer, basicAuth string, ca []byte) (*Image, error) 
 	r.Token = &auth.Token{}
 
 	// Generate HTTPS client
-	var tlsConfig *tls.Config
-	if len(ca) == 0 {
-		tlsConfig = &tls.Config{InsecureSkipVerify: true}
-	} else {
-		caPool, err := x509.SystemCertPool()
-		if err != nil {
-			Logger.Error(err, "failed to get system cert")
-			return nil, err
-		}
+	var tlsConfig = &tls.Config{InsecureSkipVerify: true}
 
-		secret, err := certs.GetSystemKeycloakCert(nil)
-		if err != nil {
-			Logger.Error(err, "failed to get keycloak cert")
-			return nil, err
-		}
-
-		if secret != nil {
-			keyclockCA, _ := certs.CAData(secret)
-			caPool.AppendCertsFromPEM(keyclockCA)
-		}
-
-		ok := caPool.AppendCertsFromPEM(ca)
-		if !ok {
-			Logger.Error(err, "failed to append cert")
-		}
-
-		ok = caPool.AppendCertsFromPEM(ca)
-		if !ok {
-			Logger.Error(err, "failed to append cert")
-		}
-		tlsConfig = &tls.Config{
-			RootCAs: caPool,
-		}
-	}
 	r.HttpClient = http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: tlsConfig,
 		},
 	}
-
 	return r, nil
 }
 
-// SetImage sets image from "[<server>/]<imageName>[:<tag>|@<digest>]" form argument
-func (r *Image) SetImage(image string) error {
+// setImage sets image from "[<server>/]<imageName>[:<tag>|@<digest>]" form argument
+func (r *Image) setImage(image string) error {
 	// Parse image
 	var img reference.Named
 	var err error
-	if r.ServerURL == "" {
-		r.ServerURL = DefaultServer
-	}
 
+	r.ServerURL = DefaultServer
 	img, err = reference.ParseNamed(image)
 	if err == nil {
 		domain := reference.Domain(img)
@@ -140,12 +92,12 @@ func (r *Image) SetImage(image string) error {
 			domain = DefaultServer
 		}
 		if !r.isValidDomain(domain) {
-			r.SetServerURL(domain)
+			r.setServerURL(domain)
 		}
 	}
 
 	if r.ServerURL == DefaultServer {
-		img, err = r.NormalizeNamed(image)
+		img, err = r.normalizedNamed(image)
 		if err != nil {
 			Logger.Error(err, "failed to normalize image", "image", image)
 			return err
@@ -207,16 +159,16 @@ func (r *Image) isValidDomain(domain string) bool {
 	return strings.Contains(r.ServerURL, domain)
 }
 
-// SetServerURL sets registry server URL
-func (r *Image) SetServerURL(url string) {
+// setServerURL sets registry server URL
+func (r *Image) setServerURL(url string) {
 	if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
 		url = "https://" + url
 	}
 	r.ServerURL = url
 }
 
-// NormalizeNamed normalize image for default server
-func (r *Image) NormalizeNamed(image string) (reference.Named, error) {
+// normalizedNamed normalize image for default server
+func (r *Image) normalizedNamed(image string) (reference.Named, error) {
 	var named, norm reference.Named
 	var err error
 

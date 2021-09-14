@@ -48,22 +48,8 @@ type trustTagRow struct {
 
 // trustRepo represents consumable information about a trusted repository
 type trustRepo struct {
-	Name               string
-	SignedTags         []trustTagRow
-	Signers            []trustSigner
-	AdministrativeKeys []trustSigner
-}
-
-// trustSigner represents a trusted signer in a trusted repository
-// a signer is defined by a name and list of trustKeys
-type trustSigner struct {
-	Name string     `json:",omitempty"`
-	Keys []trustKey `json:",omitempty"`
-}
-
-// trustKey contains information about trusted keys
-type trustKey struct {
-	ID string `json:",omitempty"`
+	Name       string
+	SignedTags []trustTagRow
 }
 
 // ReadOnly can get sign data
@@ -72,11 +58,11 @@ type ReadOnly interface {
 	ClearDir() error
 }
 
-// TrustPass key-value map to store passPhrase
-type TrustPass map[string]string
+// trustPass key-value map to store passPhrase
+type trustPass map[string]string
 
-// AddKeyPass add new passPhrase to TrustPass
-func (p TrustPass) AddKeyPass(key, val string) {
+// addKeyPass add new passPhrase to trustPass
+func (p trustPass) addKeyPass(key, val string) {
 	p[key] = val
 }
 
@@ -86,7 +72,7 @@ type notaryRepo struct {
 	repo            client.Repository
 	token           *auth.Token
 	image           *image.Image
-	passPhrase      TrustPass
+	passPhrase      trustPass
 }
 
 const (
@@ -109,7 +95,7 @@ func NewReadOnly(image *image.Image, notaryURL, path string) (ReadOnly, error) {
 		n.notaryServerURL = notaryURL
 	}
 
-	token, err := n.GetToken()
+	token, err := n.getToken()
 	if err != nil {
 		return nil, err
 	}
@@ -142,8 +128,8 @@ func NewReadOnly(image *image.Image, notaryURL, path string) (ReadOnly, error) {
 	return n, nil
 }
 
-// GetToken returns token to get sign from notary server
-func (n *notaryRepo) GetToken() (*auth.Token, error) {
+// getToken returns token to get sign from notary server
+func (n *notaryRepo) getToken() (*auth.Token, error) {
 	if n.token == nil || n.token.Type == "" || n.token.Value == "" {
 		if err := n.fetchToken(); err != nil {
 			log.Error(err, "")
@@ -260,7 +246,7 @@ func (n *notaryRepo) setToken(service string, realm string) error {
 func (n *notaryRepo) passRetriever() notary.PassRetriever {
 	return func(id, _ string, createNew bool, attempts int) (string, bool, error) {
 		if createNew {
-			n.passPhrase.AddKeyPass(id, utils.RandomString(10))
+			n.passPhrase.addKeyPass(id, utils.RandomString(10))
 		}
 		phrase, ok := n.passPhrase[id]
 		if !ok {
@@ -286,13 +272,13 @@ func (n *notaryRepo) GetSignedMetadata(tag string) (*trustRepo, error) {
 	signatureRows := matchReleasedSignatures(allSignedTargets)
 
 	// get the administrative roles
-	adminRolesWithSigs, err := n.repo.ListRoles()
+	_, err = n.repo.ListRoles()
 	if err != nil {
-		return &trustRepo{}, fmt.Errorf("No signers for %s", n.notaryServerURL)
+		return &trustRepo{}, fmt.Errorf("no signers for %s", n.notaryServerURL)
 	}
 
 	// get delegation roles with the canonical key IDs
-	delegationRoles, err := n.repo.GetDelegationRoles()
+	_, err = n.repo.GetDelegationRoles()
 	if err != nil {
 		log.Error(err, "no delegation roles found, or error fetching them for %s", n.notaryServerURL)
 	}
@@ -304,42 +290,9 @@ func (n *notaryRepo) GetSignedMetadata(tag string) (*trustRepo, error) {
 		}
 	}
 
-	signerList, adminList := []trustSigner{}, []trustSigner{}
-
-	signerRoleToKeyIDs := getDelegationRoleToKeyMap(delegationRoles)
-
-	for signerName, signerKeys := range signerRoleToKeyIDs {
-		signerKeyList := []trustKey{}
-		for _, keyID := range signerKeys {
-			signerKeyList = append(signerKeyList, trustKey{ID: keyID})
-		}
-		signerList = append(signerList, trustSigner{signerName, signerKeyList})
-	}
-	sort.Slice(signerList, func(i, j int) bool { return signerList[i].Name > signerList[j].Name })
-
-	for _, adminRole := range adminRolesWithSigs {
-		switch adminRole.Name {
-		case data.CanonicalRootRole:
-			rootKeys := []trustKey{}
-			for _, keyID := range adminRole.KeyIDs {
-				rootKeys = append(rootKeys, trustKey{ID: keyID})
-			}
-			adminList = append(adminList, trustSigner{"Root", rootKeys})
-		case data.CanonicalTargetsRole:
-			targetKeys := []trustKey{}
-			for _, keyID := range adminRole.KeyIDs {
-				targetKeys = append(targetKeys, trustKey{ID: keyID})
-			}
-			adminList = append(adminList, trustSigner{"Repository", targetKeys})
-		}
-	}
-	sort.Slice(adminList, func(i, j int) bool { return adminList[i].Name > adminList[j].Name })
-
 	return &trustRepo{
-		Name:               n.repo.GetGUN().String(),
-		SignedTags:         signatureRows,
-		Signers:            signerList,
-		AdministrativeKeys: adminList,
+		Name:       n.repo.GetGUN().String(),
+		SignedTags: signatureRows,
 	}, nil
 }
 
@@ -371,19 +324,6 @@ func matchReleasedSignatures(allTargets []client.TargetSignedStruct) []trustTagR
 		return sortorder.NaturalLess(signatureRows[i].SignedTag, signatureRows[j].SignedTag)
 	})
 	return signatureRows
-}
-
-func getDelegationRoleToKeyMap(rawDelegationRoles []data.Role) map[string][]string {
-	signerRoleToKeyIDs := make(map[string][]string)
-	for _, delRole := range rawDelegationRoles {
-		switch delRole.Name {
-		case ReleasesRole, data.CanonicalRootRole, data.CanonicalSnapshotRole, data.CanonicalTargetsRole, data.CanonicalTimestampRole:
-			continue
-		default:
-			signerRoleToKeyIDs[notaryRoleToSigner(delRole.Name)] = delRole.KeyIDs
-		}
-	}
-	return signerRoleToKeyIDs
 }
 
 // isReleasedTarget checks if a role name is "released":
