@@ -17,8 +17,8 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	log.Println("Starting server ...!!")
 
-	cert := "/tmp/certs/cert.pem"
-	key := "/tmp/certs/key.pem"
+	cert := "/etc/webhook/certs/tls.crt"
+	key := "/etc/webhook/certs/tls.key"
 	listenOn := "0.0.0.0:8443"
 
 	// Create config, clients
