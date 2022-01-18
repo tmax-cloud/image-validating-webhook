@@ -3,6 +3,8 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: image-validation-admission
   namespace: registry-system
+  annotations:
+    cert-manager.io/inject-ca-from: registry-system/image-validation-webhook-cert
 webhooks:
   - name: image-validation-admission.tmax-cloud.github.com
     admissionReviewVersions:

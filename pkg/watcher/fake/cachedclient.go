@@ -29,7 +29,7 @@ func (c *CachedClient) Get(key types.NamespacedName, out runtime.Object) error {
 		return fmt.Errorf("not found")
 	}
 
-	obj = obj.(runtime.Object).DeepCopyObject()
+	obj = obj.DeepCopyObject()
 
 	outVal := reflect.ValueOf(out)
 	objVal := reflect.ValueOf(obj)
