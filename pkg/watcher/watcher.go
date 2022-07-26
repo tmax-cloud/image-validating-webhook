@@ -2,7 +2,6 @@ package watcher
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"k8s.io/apimachinery/pkg/fields"
@@ -11,6 +10,12 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+var (
+	watcherLog = logf.Log.WithName("watcher")
 )
 
 // Handler an interface for watch events
@@ -112,27 +117,29 @@ func (w *watcher) processNextItem() bool {
 
 	keyStr, ok := key.(string)
 	if !ok {
-		log.Println("key is not a string")
+		watcherLog.Info("key is not a string")
 		return true
 	}
 
 	// Get from cache
 	obj, exists, _ := w.indexer.GetByKey(keyStr)
 	if !exists {
-		log.Printf("resource %s not found\n", keyStr)
+		msg := fmt.Sprintf("resource %s not found\n", keyStr)
+		watcherLog.Info(msg)
 		return true
 	}
 
 	// Check if it's runtime object
 	rObj, isObj := obj.(runtime.Object)
 	if !isObj {
-		log.Printf("cache contained %T, which is not an Object\n", obj)
+		msg := fmt.Sprintf("cache contained %T, which is not an Object\n", obj)
+		watcherLog.Info(msg)
 		return true
 	}
 
 	if w.handler != nil {
 		if err := w.handler.Handle(rObj.DeepCopyObject()); err != nil {
-			log.Println(err)
+			watcherLog.Error(err, "")
 			return true
 		}
 	}

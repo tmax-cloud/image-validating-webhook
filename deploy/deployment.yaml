@@ -18,6 +18,8 @@ spec:
       containers:
         - name: webhook
           image: tmaxcloudck/image-validation-webhook:v5.0.4
+          args:
+          - --zap-log-level=error
           imagePullPolicy: Always
           volumeMounts:
             - mountPath: /etc/webhook/certs

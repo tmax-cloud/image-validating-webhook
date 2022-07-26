@@ -2,13 +2,13 @@ package pods
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/rest"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // RegistryPolicyCache is a cache of type.RegistrySecurityPolicy
@@ -18,6 +18,10 @@ type RegistryPolicyCache struct {
 	clusterCachedClient   watcher.CachedClient
 	namespaceCachedClient watcher.CachedClient
 }
+
+var (
+	policylog = logf.Log.WithName("policy")
+)
 
 func newRegistryPolicyCache(cfg *rest.Config, restClient rest.Interface) (*RegistryPolicyCache, error) {
 	// Create watcher client for whv1
@@ -55,11 +59,11 @@ func (c *RegistryPolicyCache) doesMatchPolicy(registry string, namespace string)
 	namespaceObjs := &whv1.RegistrySecurityPolicyList{}
 
 	if err := c.clusterCachedClient.List(watcher.Selector{Namespace: ""}, clusterObjs); err != nil {
-		log.Println(err)
+		policylog.Error(err, "")
 		return false, whv1.RegistrySpec{}
 	}
 	if err := c.namespaceCachedClient.List(watcher.Selector{Namespace: namespace}, namespaceObjs); err != nil {
-		log.Println(err)
+		policylog.Error(err, "")
 		return false, whv1.RegistrySpec{}
 	}
 
@@ -85,7 +89,7 @@ func (c *RegistryPolicyCache) doesMatchPolicy(registry string, namespace string)
 		}
 	}
 	err := fmt.Errorf("no matching registry security policy")
-	log.Println(err)
+	policylog.Error(err, "")
 
 	return false, whv1.RegistrySpec{}
 }
