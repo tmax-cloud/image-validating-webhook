@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: webhook
-          image: tmaxcloudck/image-validation-webhook:v5.0.4
+          image: tmaxcloudck/image-validation-webhook:v5.0.5
           args:
           - --zap-log-level=error
           imagePullPolicy: Always
