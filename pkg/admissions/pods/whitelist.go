@@ -5,6 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
+	"sync"
+
 	"github.com/tmax-cloud/image-validating-webhook/internal/k8s"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher"
 	corev1 "k8s.io/api/core/v1"
@@ -14,10 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"log"
-	"regexp"
-	"strings"
-	"sync"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
@@ -35,6 +36,7 @@ const (
 )
 
 var whitelistImageReg = regexp.MustCompile(`^((([^./]+)\.([^/])+)/)?([^:@]+)(:([^@]+))?(@([^:]+:[0-9a-f]+))?`)
+var wlog = ctrl.Log.WithName("WhiteList")
 
 // WhiteList stores whitelisted images/namespaces
 type WhiteList struct {
@@ -93,7 +95,7 @@ func (w *WhiteList) ParseOrUpdateWhiteList(cm *corev1.ConfigMap) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	log.Println("Whitelist is updated. Parsing...")
+	wlog.Info("Whitelist is updated. Parsing...")
 
 	// Read Image whitelist
 	imageWhiteList, iwExist := cm.Data[whitelistByImage]
@@ -170,7 +172,7 @@ func (w *WhiteList) IsImageWhiteListed(imageUri string) bool {
 
 	img, err := parseImage(imageUri)
 	if err != nil {
-		log.Println(err)
+		wlog.Error(err, "Image WhiteListed Error")
 		return false
 	}
 

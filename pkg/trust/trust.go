@@ -24,10 +24,10 @@ import (
 	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/auth"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/image"
-	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var log = ctrl.Log.WithName("trust")
+var trustLog = logf.Log.WithName("trust")
 
 var (
 	// ReleasesRole is the role named "releases"
@@ -132,7 +132,7 @@ func NewReadOnly(image *image.Image, notaryURL, path string) (ReadOnly, error) {
 func (n *notaryRepo) getToken() (*auth.Token, error) {
 	if n.token == nil || n.token.Type == "" || n.token.Value == "" {
 		if err := n.fetchToken(); err != nil {
-			log.Error(err, "")
+			trustLog.Error(err, "")
 			return nil, err
 		}
 	}
@@ -156,7 +156,7 @@ func (n *notaryRepo) checkPingResponse(pingResp int) bool {
 }
 
 func (n *notaryRepo) fetchToken() error {
-	log.Info("Fetching token...")
+	trustLog.Info("Fetching token...")
 	// Ping
 	u, err := url.Parse(n.notaryServerURL)
 	if err != nil {
@@ -265,7 +265,7 @@ func (n *notaryRepo) ClearDir() error {
 func (n *notaryRepo) GetSignedMetadata(tag string) (*trustRepo, error) {
 	allSignedTargets, err := n.repo.GetAllTargetMetadataByName(tag)
 	if err != nil {
-		log.Error(err, "failed to get all target metadata")
+		trustLog.Error(err, "failed to get all target metadata")
 		return &trustRepo{}, err
 	}
 
@@ -280,7 +280,8 @@ func (n *notaryRepo) GetSignedMetadata(tag string) (*trustRepo, error) {
 	// get delegation roles with the canonical key IDs
 	_, err = n.repo.GetDelegationRoles()
 	if err != nil {
-		log.Error(err, "no delegation roles found, or error fetching them for %s", n.notaryServerURL)
+		errMsg := fmt.Sprintf("no delegation roles found, or error fetching them for %s", n.notaryServerURL)
+		trustLog.Error(err, errMsg)
 	}
 
 	// process the signatures to include repo admin if signed by the base targets role

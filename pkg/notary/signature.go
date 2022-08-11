@@ -2,13 +2,18 @@ package notary
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/image"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/trust"
+)
+
+var (
+	signatureLog = logf.Log.WithName("signature")
 )
 
 // Signature is a sign info of an image
@@ -39,7 +44,7 @@ func (s *Signature) GetDigest(tag string) string {
 func FetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error) {
 	img, err := image.NewImage(imageUri, basicAuth)
 	if err != nil {
-		log.Println(err)
+		signatureLog.Error(err, "failed new image")
 		return nil, err
 	}
 
@@ -50,13 +55,14 @@ func FetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error
 	tempDir := fmt.Sprintf("%s/notary/%s", os.TempDir(), utils.RandomString(10))
 	not, err := trust.NewReadOnly(img, notaryServer, tempDir)
 	if err != nil {
-		log.Println(err)
+		signatureLog.Error(err, "failed new image read in notary")
 		return nil, err
 	}
 
 	defer func() {
 		if err := not.ClearDir(); err != nil {
-			log.Printf("deleting notary temp dir error by %s", err)
+			errMsg := fmt.Sprintf("deleting notary temp dir error by %s", err)
+			signatureLog.Error(err, errMsg)
 		}
 	}()
 
@@ -67,7 +73,7 @@ func FetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error
 		if strings.Contains(err.Error(), "does not have trust data for") {
 			return nil, nil
 		}
-		log.Println(err)
+		signatureLog.Error(err, "failed Get Signed Metadata")
 		return nil, err
 	}
 

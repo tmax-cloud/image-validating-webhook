@@ -3,7 +3,6 @@ package pods
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/tmax-cloud/image-validating-webhook/internal/utils"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/notary"
@@ -13,14 +12,19 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+var (
+	validatorLog = logf.Log.WithName("validator")
 )
 
 func init() {
 	if err := whv1.AddToScheme(scheme.Scheme); err != nil {
-		log.Fatal(err)
+		validatorLog.Error(err, "")
 	}
 	if err := corev1.AddToScheme(scheme.Scheme); err != nil {
-		log.Fatal(err)
+		validatorLog.Error(err, "")
 	}
 }
 
@@ -110,7 +114,7 @@ func (h *validator) addDigestWhenImageValid(containers []corev1.Container, names
 			// Get trust info of the image
 			sig, err := notary.FetchSignature(container.Image, basicAuth, policy.Notary)
 			if err != nil {
-				log.Println(err)
+				validatorLog.Error(err, "")
 				return false, "", err
 			}
 			// sig is nil if it's not signed

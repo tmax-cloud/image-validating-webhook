@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
 	"github.com/theupdateframework/notary/client"
 	"github.com/theupdateframework/notary/cryptoservice"
 	"github.com/theupdateframework/notary/passphrase"
@@ -21,6 +19,12 @@ import (
 	"github.com/theupdateframework/notary/trustpinning"
 	"github.com/theupdateframework/notary/tuf"
 	notarydata "github.com/theupdateframework/notary/tuf/data"
+
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+var (
+	serverLog = logf.Log.WithName("server")
 )
 
 const (
@@ -68,7 +72,7 @@ func New(needAuth bool) (*Server, error) {
 
 func (s *Server) authHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		logrus.Debug(req.Method + ": " + req.URL.String())
+		serverLog.Info(req.Method + ": " + req.URL.String())
 		token := req.Header.Get("Authorization")
 
 		if strings.HasPrefix(req.URL.String(), "/token") || token != "" {
@@ -154,7 +158,7 @@ func (s *Server) notaryHandler() http.Handler {
 		for _, f := range files {
 			file, err := f.Open()
 			if err != nil {
-				log.Println(err)
+				serverLog.Error(err, "")
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -162,7 +166,7 @@ func (s *Server) notaryHandler() http.Handler {
 			fileName := notarydata.RoleName(f.Filename)
 			s.files[gun][fileName], err = ioutil.ReadAll(file)
 			if err != nil {
-				log.Println(err)
+				serverLog.Error(err, "")
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -170,13 +174,13 @@ func (s *Server) notaryHandler() http.Handler {
 			switch fileName {
 			case notarydata.CanonicalRootRole:
 				if err := json.Unmarshal(s.files[gun][fileName], &tufRepo.Root); err != nil {
-					log.Println(err)
+					serverLog.Error(err, "")
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
 			case notarydata.CanonicalSnapshotRole:
 				if err := json.Unmarshal(s.files[gun][fileName], &tufRepo.Snapshot); err != nil {
-					log.Println(err)
+					serverLog.Error(err, "")
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
@@ -185,13 +189,13 @@ func (s *Server) notaryHandler() http.Handler {
 
 		// Create timestamp
 		if err := tufRepo.InitTimestamp(); err != nil {
-			log.Println(err)
+			serverLog.Error(err, "")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		ts, err := tufRepo.SignTimestamp(time.Now().Add(10 * time.Hour))
 		if err != nil {
-			log.Println(err)
+			serverLog.Error(err, "")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
