@@ -3,7 +3,7 @@ module github.com/tmax-cloud/image-validating-webhook
 go 1.14
 
 require (
-	github.com/docker/distribution v2.7.1+incompatible
+	github.com/docker/distribution v2.8.0+incompatible
 	github.com/fvbommel/sortorder v1.0.2
 	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/google/uuid v1.1.2 // indirect
