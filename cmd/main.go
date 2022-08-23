@@ -17,7 +17,7 @@ import (
 	_ "github.com/tmax-cloud/image-validating-webhook/pkg/admissions"
 )
 
-var zlog = logf.Log.WithName("main")
+var zlog = logf.Log.WithName("main.go")
 
 func main() {
 	// when zap.Options.Development set true, the 'log level' is fixed to debug.
@@ -29,7 +29,7 @@ func main() {
 
 	configLog := uzap.NewProductionEncoderConfig()
 	configLog.EncodeTime = func(ts time.Time, encoder zapcore.PrimitiveArrayEncoder) {
-		encoder.AppendString(ts.UTC().Format(time.RFC3339Nano))
+		encoder.AppendString(ts.UTC().Local().Format(time.RFC3339))
 	}
 	logfmtEncoder := zaplogfmt.NewEncoder(configLog)
 

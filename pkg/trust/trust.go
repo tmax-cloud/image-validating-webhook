@@ -27,7 +27,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var trustLog = logf.Log.WithName("trust")
+var trustLog = logf.Log.WithName("trust.go")
 
 var (
 	// ReleasesRole is the role named "releases"
@@ -170,7 +170,7 @@ func (n *notaryRepo) fetchToken() error {
 	if n.image.BasicAuth != "" {
 		pingReq.Header.Set("Authorization", fmt.Sprintf("Basic %s", n.image.BasicAuth))
 	}
-	pingResp, err := n.image.HttpClient.Do(pingReq)
+	pingResp, err := n.image.HTTPClient.Do(pingReq)
 	if err != nil {
 		return err
 	}
@@ -217,7 +217,7 @@ func (n *notaryRepo) setToken(service string, realm string) error {
 	}
 	tokenReq.URL.RawQuery = tokenQ.Encode()
 
-	tokenResp, err := n.image.HttpClient.Do(tokenReq)
+	tokenResp, err := n.image.HTTPClient.Do(tokenReq)
 	if err != nil {
 		return err
 	}

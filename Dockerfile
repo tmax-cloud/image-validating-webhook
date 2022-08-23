@@ -1,6 +1,6 @@
-FROM golang:1.14.11-alpine as builder
+FROM golang:1.18-alpine as builder
 
-RUN apk update && apk add git && apk add ca-certificates
+RUN apk update && apk upgrade && apk add git && apk add bash && apk add ca-certificates
 
 WORKDIR /image-validation-admission-controller
 

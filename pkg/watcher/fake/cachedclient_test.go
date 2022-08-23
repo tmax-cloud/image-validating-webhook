@@ -1,8 +1,6 @@
 package fake
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/require"
 	whv1 "github.com/tmax-cloud/image-validating-webhook/pkg/type"
 	"github.com/tmax-cloud/image-validating-webhook/pkg/watcher"
@@ -10,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"testing"
 )
 
 type testCachedClientGetTestCase struct {

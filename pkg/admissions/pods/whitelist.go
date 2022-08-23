@@ -36,7 +36,7 @@ const (
 )
 
 var whitelistImageReg = regexp.MustCompile(`^((([^./]+)\.([^/])+)/)?([^:@]+)(:([^@]+))?(@([^:]+:[0-9a-f]+))?`)
-var wlog = ctrl.Log.WithName("WhiteList")
+var wlog = ctrl.Log.WithName("whitelist.go")
 
 // WhiteList stores whitelisted images/namespaces
 type WhiteList struct {
@@ -166,11 +166,11 @@ func (w *WhiteList) IsNamespaceWhiteListed(ns string) bool {
 }
 
 // IsImageWhiteListed checks if an image is whitelisted
-func (w *WhiteList) IsImageWhiteListed(imageUri string) bool {
+func (w *WhiteList) IsImageWhiteListed(imageURI string) bool {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	img, err := parseImage(imageUri)
+	img, err := parseImage(imageURI)
 	if err != nil {
 		wlog.Error(err, "Image WhiteListed Error")
 		return false

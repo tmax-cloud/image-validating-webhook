@@ -3,6 +3,9 @@ package pods
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -11,8 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"strings"
-	"testing"
 )
 
 type imageAdmissionHandlerTestCase struct {
@@ -38,7 +39,7 @@ func TestImageAdmission_HandleAdmission(t *testing.T) {
 				},
 			},
 			expectedAllowed:       false,
-			expectedResultMessage: "Pod is not valid: image 'test-not-signed:test' is not signed",
+			expectedResultMessage: "Pod is not valid: \nimage 'test-not-signed:test' is not signed",
 		},
 		"podSigned": {
 			gvk: metav1.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},

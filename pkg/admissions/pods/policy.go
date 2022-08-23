@@ -20,7 +20,7 @@ type RegistryPolicyCache struct {
 }
 
 var (
-	policylog = logf.Log.WithName("policy")
+	policylog = logf.Log.WithName("policy.go")
 )
 
 func newRegistryPolicyCache(cfg *rest.Config, restClient rest.Interface) (*RegistryPolicyCache, error) {
