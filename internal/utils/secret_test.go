@@ -2,9 +2,10 @@ package utils
 
 import (
 	"encoding/base64"
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	"testing"
 )
 
 type newImagePullSecretTestCase struct {
@@ -162,7 +163,7 @@ func TestImagePullSecret_GetHostBasicAuth(t *testing.T) {
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
 			ps := ImagePullSecret{
-				json: &DockerConfigJson{
+				json: &DockerConfigJSON{
 					Auths: c.auths,
 				},
 			}

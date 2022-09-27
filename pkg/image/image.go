@@ -15,7 +15,7 @@ import (
 )
 
 // Logger is log util with name image-client
-var Logger = log.Log.WithName("image-client")
+var Logger = log.Log.WithName("image.go")
 
 const (
 	// DefaultServerHostName is the default registry server hostname
@@ -47,7 +47,7 @@ type Image struct {
 	BasicAuth string
 	Token     *auth.Token
 
-	HttpClient http.Client
+	HTTPClient http.Client
 }
 
 // NewImage creates new image client
@@ -70,7 +70,7 @@ func NewImage(uri, basicAuth string) (*Image, error) {
 	// Generate HTTPS client
 	var tlsConfig = &tls.Config{InsecureSkipVerify: true}
 
-	r.HttpClient = http.Client{
+	r.HTTPClient = http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: tlsConfig,
 		},

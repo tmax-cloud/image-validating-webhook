@@ -4,8 +4,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	corev1 "k8s.io/api/core/v1"
 	"net/url"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Keys for docker configs
@@ -15,8 +16,8 @@ const (
 	DockerConfigPasswordKey = "password"
 )
 
-// DockerConfigJson is a top-level dcj
-type DockerConfigJson struct {
+// DockerConfigJSON is a top-level dcj
+type DockerConfigJSON struct {
 	Auths map[string]DockerLoginCredential `json:"auths"`
 }
 
@@ -26,7 +27,7 @@ type DockerLoginCredential map[string]string
 // ImagePullSecret is a secret and dcj struct
 type ImagePullSecret struct {
 	secret *corev1.Secret
-	json   *DockerConfigJson
+	json   *DockerConfigJSON
 }
 
 // NewImagePullSecret creates a new ImagePullSecret from a secret
@@ -40,14 +41,14 @@ func NewImagePullSecret(secret *corev1.Secret) (*ImagePullSecret, error) {
 		return nil, fmt.Errorf("failed to get dockerconfig from ImagePullSecret")
 	}
 
-	var dockerConfigJson DockerConfigJson
-	if err := json.Unmarshal(imagePullSecretData, &dockerConfigJson); err != nil {
+	var dockerConfigJSON DockerConfigJSON
+	if err := json.Unmarshal(imagePullSecretData, &dockerConfigJSON); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal ImagePullSecret(%s)'s dockerconfig", secret.Name)
 	}
 
 	return &ImagePullSecret{
 		secret: secret,
-		json:   &dockerConfigJson,
+		json:   &dockerConfigJSON,
 	}, nil
 }
 

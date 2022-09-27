@@ -16,7 +16,11 @@ type RegistrySpec struct {
 	// Notary is URL of registry's notary server
 	Notary string `json:"notary,omitempty"`
 	// SignCheck is a flag to decide to check sign data or not. If it is set false, sign check is skipped
-	SignCheck bool `json:"signcheck"`
+	SignCheck bool `json:"signCheck"`
+	// CosignKeyRef is key reference like secret resource or else that saved cosign key
+	CosignKeyRef string `json:"cosignKeyRef,omitempty"`
+	// Signers are the list of desired signers of images to be allowed
+	Signer []string `json:"signer,omitempty"`
 }
 
 // ClusterRegistrySecurityPolicySpec is a spec of ClusterRegistrySecurityPolicy

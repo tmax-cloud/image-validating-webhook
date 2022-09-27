@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	signatureLog = logf.Log.WithName("signature")
+	signatureLog = logf.Log.WithName("signature.go")
 )
 
 // Signature is a sign info of an image
@@ -40,9 +40,28 @@ func (s *Signature) GetDigest(tag string) string {
 	return digest
 }
 
+// MatchSigner find match who signed
+func (s *Signature) MatchSigner(policySigners []string) bool {
+	for _, signedTag := range s.SignedTags {
+		for _, signers := range signedTag.Signers {
+			// when image signer is Repository Administrator, just return true
+			if signers == "Repo Admin" {
+				return true
+			}
+			for _, sgr := range policySigners {
+				if sgr == signers {
+					return true
+				}
+			}
+		}
+
+	}
+	return false
+}
+
 // FetchSignature fetches a signature from the notary server
-func FetchSignature(imageUri, basicAuth, notaryServer string) (*Signature, error) {
-	img, err := image.NewImage(imageUri, basicAuth)
+func FetchSignature(imageURI, basicAuth, notaryServer string) (*Signature, error) {
+	img, err := image.NewImage(imageURI, basicAuth)
 	if err != nil {
 		signatureLog.Error(err, "failed new image")
 		return nil, err

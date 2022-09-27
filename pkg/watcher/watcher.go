@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	watcherLog = logf.Log.WithName("watcher")
+	watcherLog = logf.Log.WithName("watcher.go")
 )
 
 // Handler an interface for watch events

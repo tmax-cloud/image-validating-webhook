@@ -1,5 +1,5 @@
 # Current version
-VERSION ?= v5.0.5
+VERSION ?= v5.0.6
 REGISTRY ?= tmaxcloudck
 
 # Image URL to use all building/pushing image targets
@@ -82,13 +82,15 @@ test-lint:
 
 # Unit test
 test-unit:
-	go test -v ./...
+	go test -v ./... -count=1
 
 save-sha-gen:
 	$(eval GENSHA=$(shell sha512sum pkg/type/zz_generated.deepcopy.go))
+	$(info GENSHA is $(GENSHA))
 
 compare-sha-gen:
 	$(eval GENSHA_AFTER=$(shell sha512sum pkg/type/zz_generated.deepcopy.go))
+	$(info GENSHA_AFTER is $(GENSHA_AFTER))
 	@if [ "${GENSHA_AFTER}" = "${GENSHA}" ]; then echo "zz_generated.deepcopy.go is not changed"; else echo "zz_generated.deepcopy.go file is changed"; exit 1; fi
 
 save-sha-crd:

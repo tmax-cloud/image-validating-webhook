@@ -10,7 +10,7 @@ kubectl apply -f deploy/role/role.yaml
 kubectl apply -f deploy/role/role-binding.yaml
 
 kubectl apply -f deploy/whitelist-configmap.yaml
-kubectl apply -f deploy/deployment.yaml
+kubectl apply -f deploy/deployment-dev.yaml
 kubectl apply -f deploy/service.yaml
 kubectl apply -f deploy/validating-webhook.yaml
 

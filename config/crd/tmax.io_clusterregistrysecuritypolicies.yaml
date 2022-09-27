@@ -45,19 +45,29 @@ spec:
                 items:
                   description: RegistrySpec is a spec of Registries
                   properties:
+                    cosignKeyRef:
+                      description: CosignKeyRef is key reference like secret resource
+                        or else that saved cosign key
+                      type: string
                     notary:
                       description: Notary is URL of registry's notary server
                       type: string
                     registry:
                       description: Registry is URL of target registry
                       type: string
-                    signcheck:
+                    signCheck:
                       description: SignCheck is a flag to decide to check sign data
                         or not. If it is set false, sign check is skipped
                       type: boolean
+                    signer:
+                      description: Signers are the list of desired signers of images
+                        to be allowed
+                      items:
+                        type: string
+                      type: array
                   required:
                   - registry
-                  - signcheck
+                  - signCheck
                   type: object
                 type: array
             required:
