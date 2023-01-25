@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	plog = logf.Log.WithName("pods")
+	plog = logf.Log.WithName("pods.go")
 )
 
 func init() {
@@ -123,7 +123,7 @@ func (a *ImageAdmission) HandleAdmission(review *admissionv1beta1.AdmissionRevie
 		}
 	} else {
 		plog.Info("Pod is invalid")
-		setReviewResponseNotAllowed(review, fmt.Sprintf("Pod is not valid: %s", invalidReason))
+		setReviewResponseNotAllowed(review, fmt.Sprintf("Pod is not valid: \n%s", invalidReason))
 	}
 
 	return nil

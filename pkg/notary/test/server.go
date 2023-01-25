@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	serverLog = logf.Log.WithName("server")
+	serverLog = logf.Log.WithName("server.go")
 )
 
 const (

@@ -126,9 +126,9 @@ func TestHandler_IsValid(t *testing.T) {
 
 	for name, c := range tc {
 		t.Run(name, func(t *testing.T) {
-			imgUri := fmt.Sprintf("%s/%s", u.Host, c.image)
+			imgURI := fmt.Sprintf("%s/%s", u.Host, c.image)
 
-			pod := generateTestPod(imgUri, c.namespace, c.pullSecret)
+			pod := generateTestPod(imgURI, c.namespace, c.pullSecret)
 			valid, reason, err := validator.CheckIsValidAndAddDigest(pod)
 			if c.expectedErrOccur {
 				require.Error(t, err)
@@ -141,7 +141,7 @@ func TestHandler_IsValid(t *testing.T) {
 				} else {
 					// Whitelisted image does not get digest
 					if !strings.Contains(pod.Spec.Containers[0].Image, testImageWhitelisted) {
-						ref, _ := parseImage(imgUri)
+						ref, _ := parseImage(imgURI)
 						if !strings.Contains(pod.Spec.Containers[0].Image, testImageNoSignCheck) {
 							ref.digest = fmt.Sprintf("%x", testDummyDigest)
 						}
@@ -218,7 +218,7 @@ func createTestWhiteListConfigMap(cli kubernetes.Interface) error {
 }
 
 func createTestSecret(cli kubernetes.Interface, registryHost string) error {
-	auth := utils.DockerConfigJson{
+	auth := utils.DockerConfigJSON{
 		Auths: map[string]utils.DockerLoginCredential{
 			registryHost: {
 				utils.DockerConfigAuthKey: "dummy",
