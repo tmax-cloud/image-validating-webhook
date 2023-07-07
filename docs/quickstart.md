@@ -33,7 +33,8 @@
         name: sample-cluster-policy
       spec:
         registries:
-          - registry: docker.io
+          - registry: core.harbor.domain.io
+            notary: https://notary.harbor.domain.io
             cosignKeyRef: k8s://<namespace>/<cosign_key_secret>
             signer: ["<signer1>"]
             signCheck: true
